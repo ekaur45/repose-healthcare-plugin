@@ -74,6 +74,16 @@ class Repose_Reference {
         ) );
     }
 
+
+
+    public static function getOrderId(string $ref){
+        global $wpdb;
+        return (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT post_id as orderId FROM {$wpdb->postmeta}
+             WHERE meta_key = '_repose_reference_number' AND meta_value = %s LIMIT 1"
+            ,$ref));
+    }
+
     /**
      * Extract the WooCommerce order ID from an old-format reference number.
      * New format (R26D141257) does not encode order ID — returns 0.

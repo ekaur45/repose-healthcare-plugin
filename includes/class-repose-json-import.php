@@ -356,12 +356,21 @@ class Repose_JSON_Import {
         }
         // Try extracting order ID from reference number format RYYMMDDXXXX
         if ( ! $order && $ref_number ) {
-            $extracted_id = Repose_Reference::extract_order_id( $ref_number );
-            $debug['step_5_order_lookup'][] = "extracted_order_id from ref '{$ref_number}': {$extracted_id}";
-            if ( $extracted_id > 0 ) {
-                $try = wc_get_order( $extracted_id );
+            //$orderId = Repose_Reference::getOrderId($ref_number);
+            $orderIds = wc_get_orders([
+                'limit'      => 1,
+                'meta_key'   => '_repose_reference_number',
+                'meta_value' => $ref_number,
+                'return'     => 'ids',
+            ]);
+
+            $orderId = $orderIds[0] ?? 0;
+            //$extracted_id = Repose_Reference::extract_order_id( $ref_number );
+            $debug['step_5_order_lookup'][] = "order id from ref '{$ref_number}': {$orderId}";
+            if ( $orderId > 0 ) {
+                $try = wc_get_order( $orderId );
                 if ( $try ) {
-                    $order = $try; $order_id = $extracted_id;
+                    $order = $try; $order_id = $orderId;
                     $debug['step_5_order_lookup'][] = "FOUND via ref extraction: {$order_id}";
                 }
             }
