@@ -1002,13 +1002,21 @@ class HN_Repose_Admin
         } elseif (!empty($params['reference_number'])) {
             // Look up by reference number stored in order meta
             global $wpdb;
-            $ref = sanitize_text_field($params['reference_number']);
-            $order_id = (int) $wpdb->get_var($wpdb->prepare(
-                "SELECT post_id FROM {$wpdb->postmeta}
-                 WHERE meta_key = '_repose_reference_number' AND meta_value = %s
-                 LIMIT 1",
-                $ref
-            ));
+            // $ref = sanitize_text_field($params['reference_number']);
+            // $order_id = (int) $wpdb->get_var($wpdb->prepare(
+            //     "SELECT post_id FROM {$wpdb->postmeta}
+            //      WHERE meta_key = '_repose_reference_number' AND meta_value = %s
+            //      LIMIT 1",
+            //     $ref
+            // ));
+            $orderIds = wc_get_orders([
+                'limit' => 1,
+                'meta_key' => '_repose_reference_number',
+                'meta_value' => $params['reference_number'],
+                'return' => 'ids',
+            ]);
+
+            $order_id = $orderIds[0] ?? 0;
         }
 
         if (!$order_id) {
@@ -1065,7 +1073,7 @@ class HN_Repose_Admin
             return;
         if ($order->get_meta('_repose_registry_synced') === '1')
             return;
-        
+
         Repose_Patient_Registry::sync_from_order($order);
         $order->update_meta_data('_repose_registry_synced', '1');
         $order->save();
@@ -1236,7 +1244,8 @@ class HN_Repose_Admin
 
             // Per-patient test assignment
             $p1_tests = array_map(function ($t) {
-                return array('product_id' => (int) ($t['product_id'] ?? 0), 'name' => sanitize_text_field($t['name'] ?? '')); }, $p1['tests'] ?? array());
+                return array('product_id' => (int) ($t['product_id'] ?? 0), 'name' => sanitize_text_field($t['name'] ?? ''));
+            }, $p1['tests'] ?? array());
             $order->update_meta_data('_repose_patient_1_tests', $p1_tests);
 
             // Additional patients 2-5
@@ -1253,7 +1262,8 @@ class HN_Repose_Admin
                     );
                     $additional[] = $entry;
                     $pn_tests = array_map(function ($t) {
-                        return array('product_id' => (int) ($t['product_id'] ?? 0), 'name' => sanitize_text_field($t['name'] ?? '')); }, $ap['tests'] ?? array());
+                        return array('product_id' => (int) ($t['product_id'] ?? 0), 'name' => sanitize_text_field($t['name'] ?? ''));
+                    }, $ap['tests'] ?? array());
                     $order->update_meta_data("_repose_patient_{$pn}_tests", $pn_tests);
                 }
                 $order->update_meta_data('_repose_additional_patients', $additional);
