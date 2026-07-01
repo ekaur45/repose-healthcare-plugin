@@ -178,7 +178,7 @@
                     </td>
                 </tr>
                 <tr class="repose-note-row" id="note-row-<?php echo $result->id; ?>" style="display:none;">
-                    <td colspan="9" style="padding:12px 16px;background:#f9f9f9;border-top:1px dashed #ddd;">
+                    <td colspan="10" style="padding:12px 16px;background:#f9f9f9;border-top:1px dashed #ddd;">
                         <?php
                         $notes = HN_Repose_Results_Manager::get_notes( $result->id );
                         if ( $notes ) : ?>
@@ -193,6 +193,7 @@
                                 </span>
                                 <?php echo esc_html( $note->note ); ?>
                                 <span style="color:#aaa;font-size:11px;"> &mdash; <?php echo esc_html( $note->created_at ); ?></span>
+                                <button class="button button-small button-link btn-delete-note" data-note-id="<?php echo esc_attr( $note->id ); ?>" style="font-size:11px;color:#c0392b;">Delete</button>
                             </li>
                         <?php endforeach; ?>
                         </ul>

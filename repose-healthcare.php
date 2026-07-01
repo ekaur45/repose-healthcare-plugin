@@ -3,7 +3,7 @@
  * Plugin Name: Repose Healthcare WooCommerce Plugin
  * Plugin URI:  https://reposehealthcare.com
  * Description: Automates order processing, laboratory integration, and diagnostic result reporting for Repose Healthcare home testing kits.
- * Version:     1.4.13
+ * Version:     1.4.14
  * Author:      Repose Healthcare
  * Text Domain: repose-healthcare
  * Requires at least: 6.0
@@ -14,7 +14,7 @@
 if (!defined('ABSPATH'))
     exit;
 
-define('REPOSE_VERSION', '1.4.13');
+define('REPOSE_VERSION', '1.4.14');
 define('REPOSE_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REPOSE_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REPOSE_PLUGIN_FILE', __FILE__);

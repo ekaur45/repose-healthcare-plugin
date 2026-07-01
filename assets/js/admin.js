@@ -199,11 +199,24 @@ document.addEventListener('DOMContentLoaded', function () {
                  $td.find('.repose-note-text').val('');
                  var $ul = $td.find('ul');
                  if (!$ul.length) { $td.prepend('<strong>Existing Notes:</strong><ul></ul>'); $ul = $td.find('ul'); }
-                 $ul.append('<li>[' + $('<span>').text(visibility).html() + '] ' + $('<span>').text(note).html() + '</li>');
+                 $ul.append('<li>[' + $('<span>').text(visibility).html() + '] ' + $('<span>').text(note).html() + ' <button class="btn-delete-note">Delete</button></li>');
              } else { showNotice((r && r.data) ? r.data : 'Failed.', 'error'); }
          });
     });
+    $(document).on('click', '.btn-delete-note', function () {
+        var $li = $(this).closest('li');
+        var noteId = $(this).attr('data-note-id');
+        if (!noteId) { alert('Cannot find note ID.'); return; }
+        if (!confirm('Delete this note?')) return;
 
+        $.post(ajaxUrl, { action: 'repose_delete_note', note_id: noteId, nonce: nonce })
+         .done(function (r) {
+             if (r && r.success) {
+                 showNotice(r.data.message || 'Note deleted.');
+                 $li.fadeOut(400, function () { $(this).remove(); });
+             } else { showNotice((r && r.data) ? r.data : 'Failed.', 'error'); }
+            });
+    });
     $(document).on('click', '.btn-approve-result', function () {
         var btn      = this;
         var $actions = $(btn).closest('.repose-result-actions');

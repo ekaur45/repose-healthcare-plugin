@@ -465,16 +465,16 @@ class Repose_JSON_Import {
         $filename = sanitize_file_name( 'json-result-' . $order_id . '-' . time() . '.pdf' );
         $filepath = $results_dir . $filename;
 
-        $pdf_result = self::generate_pdf( $jsonResult, $order, $filepath );
-        if ( is_wp_error( $pdf_result ) ) {
-            $debug['step_7_pdf_error'] = $pdf_result->get_error_message();
+        // $pdf_result = self::generate_pdf( $jsonResult, $order, $filepath );
+        // if ( is_wp_error( $pdf_result ) ) {
+            //$debug['step_7_pdf_error'] = $pdf_result->get_error_message();
             $filename = str_replace( '.pdf', '.html', $filename );
             $filepath = $results_dir . $filename;
             file_put_contents( $filepath, self::build_html_report( $jsonResult, $order ) );
             $debug['step_7_file_type'] = 'html_fallback';
-        } else {
-            $debug['step_7_file_type'] = 'pdf';
-        }
+        // } else {
+        //     $debug['step_7_file_type'] = 'pdf';
+        // }
         $debug['step_7_filename'] = $filename;
 
         // Store raw JSON alongside the report
@@ -726,13 +726,13 @@ class Repose_JSON_Import {
         $new_filename = sanitize_file_name( 'json-result-' . $result->order_id . '-' . time() . '.pdf' );
         $new_filepath = $results_dir . $new_filename;
 
-        $pdf_result = self::generate_pdf( $lab_data, $wc_order, $new_filepath );
-        if ( is_wp_error( $pdf_result ) ) {
+        //$pdf_result = self::generate_pdf( $lab_data, $wc_order, $new_filepath );
+        //if ( is_wp_error( $pdf_result ) ) {
             // Fall back to HTML
             $new_filename = str_replace( '.pdf', '.html', $new_filename );
             $new_filepath = $results_dir . $new_filename;
             file_put_contents( $new_filepath, self::build_html_report( $lab_data, $wc_order ) );
-        }
+        //}
 
         // Update DB row with new filename
         $wpdb->update(

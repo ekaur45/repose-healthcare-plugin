@@ -121,6 +121,10 @@ class HN_Repose_Results_Manager {
         ) );
         return (int) $wpdb->insert_id;
     }
+    public static function delete_note( int $note_id ): bool {
+        global $wpdb;
+        return (bool) $wpdb->delete( $wpdb->prefix . 'repose_result_notes', array( 'id' => $note_id ) );
+    }
 
     public static function get_notes( int $result_id, bool $include_internal = true ): array {
         global $wpdb;

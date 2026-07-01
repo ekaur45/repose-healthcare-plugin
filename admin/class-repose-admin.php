@@ -17,6 +17,7 @@ class HN_Repose_Admin
         add_action('wp_ajax_repose_approve_result', array(__CLASS__, 'ajax_approve_result'));
         add_action('wp_ajax_repose_upload_result', array(__CLASS__, 'ajax_upload_result'));
         add_action('wp_ajax_repose_add_note', array(__CLASS__, 'ajax_add_note'));
+        add_action('wp_ajax_repose_delete_note', array(__CLASS__, 'ajax_delete_note'));
         add_action('wp_ajax_repose_save_template', array(__CLASS__, 'ajax_save_template'));
         add_action('wp_ajax_repose_delete_template', array(__CLASS__, 'ajax_delete_template'));
         add_action('wp_ajax_repose_save_settings', array(__CLASS__, 'ajax_save_settings'));
@@ -558,6 +559,16 @@ class HN_Repose_Admin
 
         $id = HN_Repose_Results_Manager::add_note($result_id, get_current_user_id(), $note, $visibility);
         wp_send_json_success(array('note_id' => $id));
+    }
+    public static function ajax_delete_note()
+    {
+        check_ajax_referer('repose_admin_nonce', 'nonce');
+        if (!current_user_can('manage_woocommerce'))
+            wp_send_json_error('Unauthorized', 403);
+
+        $note_id = (int) ($_POST['note_id'] ?? 0);
+        HN_Repose_Results_Manager::delete_note($note_id);
+        wp_send_json_success(array('message' => 'Note deleted.'));
     }
 
     // -----------------------------------------------------------------------
