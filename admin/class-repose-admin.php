@@ -15,6 +15,7 @@ class HN_Repose_Admin
         add_action('wp_ajax_repose_reject_order', array(__CLASS__, 'ajax_reject_order'));
         add_action('wp_ajax_repose_transmit_order', array(__CLASS__, 'ajax_transmit_order'));
         add_action('wp_ajax_repose_approve_result', array(__CLASS__, 'ajax_approve_result'));
+        add_action('wp_ajax_repose_reject_result', array(__CLASS__, 'ajax_reject_result'));
         add_action('wp_ajax_repose_upload_result', array(__CLASS__, 'ajax_upload_result'));
         add_action('wp_ajax_repose_add_note', array(__CLASS__, 'ajax_add_note'));
         add_action('wp_ajax_repose_delete_note', array(__CLASS__, 'ajax_delete_note'));
@@ -491,6 +492,21 @@ class HN_Repose_Admin
 
         $ok = HN_Repose_Results_Manager::approve_result($result_id, get_current_user_id(), $schedule_review);
         $ok ? wp_send_json_success(array('message' => 'Result approved and patient notified.'))
+            : wp_send_json_error('Result not found.');
+    }
+
+    public static function ajax_reject_result()
+    {
+        check_ajax_referer('repose_admin_nonce', 'nonce');
+        if (!current_user_can('manage_woocommerce'))
+            wp_send_json_error('Unauthorized', 403);
+
+        $result_id = (int) ($_POST['result_id'] ?? 0);
+        $reason    = sanitize_textarea_field($_POST['reason'] ?? '');
+        $notify    = !empty($_POST['notify']);
+
+        $ok = HN_Repose_Results_Manager::reject_result($result_id, get_current_user_id(), $reason, $notify);
+        $ok ? wp_send_json_success(array('message' => $notify ? 'Result rejected and patient notified.' : 'Result rejected.'))
             : wp_send_json_error('Result not found.');
     }
 

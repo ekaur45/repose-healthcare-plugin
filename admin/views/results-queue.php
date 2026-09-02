@@ -6,12 +6,13 @@
     global $wpdb;
 
     $tab = sanitize_text_field( $_GET['rh_tab'] ?? 'pending_review' );
-    $allowed_tabs = array( 'pending_review', 'reported', 'all' );
+    $allowed_tabs = array( 'pending_review', 'reported', 'rejected', 'all' );
     if ( ! in_array( $tab, $allowed_tabs, true ) ) $tab = 'pending_review';
 
     $where_map = array(
         'pending_review' => "status = 'pending_review'",
         'reported'       => "status = 'reported'",
+        'rejected'       => "status = 'rejected'",
         'all'            => '1=1',
     );
 
@@ -35,6 +36,7 @@
     $tabs = array(
         'pending_review' => array( 'Pending Review', $cnt('pending_review'), '#856404', '#fff3cd' ),
         'reported'       => array( 'Approved',        $cnt('reported'),       '#2e7d4f', '#d4edda' ),
+        'rejected'       => array( 'Rejected',        $cnt('rejected'),       '#c0392b', '#f8d7da' ),
         'all'            => array( 'All Results',     $total_all,             '#1a6e8c', '#e8f4f8' ),
     );
     ?>
@@ -81,7 +83,7 @@
                     <th style="width:150px">Approved</th>
                     <th style="width:110px">Patient UID</th>
                     <th style="width:90px">Source</th>
-                    <th style="width:<?php echo $tab === 'pending_review' ? '290px' : '130px'; ?>">Actions</th>
+                    <th style="width:<?php echo ( $tab === 'pending_review' || $tab === 'all' ) ? '440px' : '130px'; ?>">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -110,6 +112,7 @@
                 $status_map = array(
                     'pending_review' => array( 'Pending Review', '#856404', '#fff3cd' ),
                     'reported'       => array( 'Approved',       '#2e7d4f', '#d4edda' ),
+                    'rejected'       => array( 'Rejected',       '#c0392b', '#f8d7da' ),
                 );
                 list( $slabel, $sfc, $sbg ) = $status_map[ $result->status ] ?? array( ucfirst($result->status), '#333', '#eee' );
             ?>
@@ -172,6 +175,10 @@
                             <input type="checkbox" class="chk-schedule-review"> 24h Review
                         </label>
                         <button class="button button-small button-primary btn-approve-result">Approve &amp; Notify</button>
+                        <button type="button" class="button button-small" onclick="rhRqOpenReject(<?php echo (int) $result->id; ?>, false)">Reject</button>
+                        <button type="button" class="button button-small" style="color:#c0392b;border-color:#c0392b;" onclick="rhRqOpenReject(<?php echo (int) $result->id; ?>, true)">Reject &amp; Notify</button>
+                        <?php elseif ( $result->status === 'rejected' ) : ?>
+                        <span style="font-size:11px;color:#c0392b;font-weight:600;">&#10007; Rejected</span>
                         <?php else : ?>
                         <span style="font-size:11px;color:#2e7d4f;font-weight:600;">&#10003; Notified</span>
                         <?php endif; ?>
@@ -256,6 +263,19 @@
     </div>
 </div>
 
+<!-- Reject Result modal -->
+<div id="rh-rq-reject-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;">
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:28px 32px;border-radius:8px;width:440px;max-width:90%;box-shadow:0 8px 40px rgba(0,0,0,.3);">
+        <h3 style="margin:0 0 16px;color:#c0392b;" id="rh-rq-reject-title">Reject Result</h3>
+        <input type="hidden" id="rh-rq-reject-id" value="">
+        <input type="hidden" id="rh-rq-reject-notify" value="0">
+        <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px;">Reason (saved as an internal note)</label>
+        <textarea id="rh-rq-reject-reason" rows="4" style="width:100%;padding:10px;margin-bottom:14px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-size:13px;" placeholder="e.g. Sample quality insufficient, retest required..."></textarea>
+        <button type="button" class="button button-primary" id="rh-rq-reject-confirm" onclick="rhRqConfirmReject()">Confirm Reject</button>
+        <button type="button" class="button" onclick="document.getElementById('rh-rq-reject-modal').style.display='none'" style="margin-left:8px;">Cancel</button>
+    </div>
+</div>
+
 <script>
 var rhRqAjax = <?php echo json_encode(['url'=>admin_url('admin-ajax.php'),'nonce'=>wp_create_nonce('repose_admin_nonce')]); ?>;
 var rhRqSearchTimer = null;
@@ -335,5 +355,38 @@ function rhRqConfirmAssign(){
 }
 
 document.getElementById('rh-rq-assign-modal').addEventListener('click',function(e){ if(e.target===this)this.style.display='none'; });
+
+function rhRqOpenReject(resultId, notify){
+    document.getElementById('rh-rq-reject-id').value = resultId;
+    document.getElementById('rh-rq-reject-notify').value = notify ? '1' : '0';
+    document.getElementById('rh-rq-reject-reason').value = '';
+    document.getElementById('rh-rq-reject-title').textContent = notify ? 'Reject Result & Notify Patient' : 'Reject Result';
+    document.getElementById('rh-rq-reject-confirm').textContent = notify ? 'Confirm Reject & Notify' : 'Confirm Reject';
+    document.getElementById('rh-rq-reject-modal').style.display = 'block';
+}
+
+function rhRqConfirmReject(){
+    var resultId = document.getElementById('rh-rq-reject-id').value;
+    var notify   = document.getElementById('rh-rq-reject-notify').value;
+    var reason   = document.getElementById('rh-rq-reject-reason').value.trim();
+    var btn = document.getElementById('rh-rq-reject-confirm');
+    btn.disabled = true; btn.textContent = 'Rejecting...';
+    var body = 'action=repose_reject_result&nonce=' + encodeURIComponent(rhRqAjax.nonce)
+        + '&result_id=' + encodeURIComponent(resultId)
+        + '&notify=' + encodeURIComponent(notify)
+        + '&reason=' + encodeURIComponent(reason);
+    fetch(rhRqAjax.url,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
+        .then(function(r){return r.json();}).then(function(r){
+            btn.disabled = false;
+            if(r && r.success){
+                document.getElementById('rh-rq-reject-modal').style.display = 'none';
+                location.reload();
+            } else {
+                alert((r && r.data) ? r.data : 'Failed.');
+            }
+        }).catch(function(){ btn.disabled=false; alert('Network error.'); });
+}
+
+document.getElementById('rh-rq-reject-modal').addEventListener('click',function(e){ if(e.target===this)this.style.display='none'; });
 </script>
 </div>

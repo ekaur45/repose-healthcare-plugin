@@ -125,6 +125,100 @@ class Repose_Notifications {
     }
 
     // -----------------------------------------------------------------------
+    // Result rejected: notify patient a retest / further action is needed
+    // -----------------------------------------------------------------------
+
+    public static function notify_result_rejected( int $order_id, string $reason = '' ) {
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) return;
+
+        $to           = $order->get_billing_email();
+        $name         = $order->get_billing_first_name();
+        $company_name = get_option( 'repose_company_name', 'Repose Healthcare Ltd' );
+        $brand_color  = get_option( 'repose_brand_color', '#1a6e8c' );
+        $logo_url     = get_option( 'repose_logo_url', '' );
+        $company_website = get_option( 'repose_company_website', '' );
+        $company_email   = get_option( 'repose_company_email', '' );
+        $company_phone   = get_option( 'repose_company_phone', '' );
+
+        $subject = get_option( 'repose_result_rejected_email_subject', 'An Update on Your Recent Test' );
+        $raw_body = get_option( 'repose_result_rejected_email_body',
+            "Dear {name},\n\nAfter clinical review, we are unable to release your test result at this time and further action is required before it can be reported.\n\nOur team will be in touch shortly with next steps. If you have any questions in the meantime, please don't hesitate to contact us at {support_email} or {support_phone}.\n\nKind regards,\n{site_name}" );
+
+        $raw_body = str_replace(
+            array( '{name}', '{site_name}', '{reference}', '{support_email}', '{support_phone}' ),
+            array(
+                esc_html( $name ),
+                esc_html( $company_name ),
+                esc_html( $order->get_meta( '_repose_reference_number' ) ),
+                esc_html( $company_email ),
+                esc_html( $company_phone ),
+            ),
+            $raw_body
+        );
+
+        if ( trim( $reason ) !== '' ) {
+            $raw_body .= "\n\nNote from our clinical team: " . $reason;
+        }
+
+        $logo_html = $logo_url
+            ? '<img src="' . esc_url( $logo_url ) . '" alt="' . esc_attr( $company_name ) . '" style="max-height:50px;max-width:180px;">'
+            : '<span style="font-size:20px;font-weight:700;color:#fff;">' . esc_html( $company_name ) . '</span>';
+
+        $body_paragraphs = '';
+        foreach ( explode( "\n", $raw_body ) as $line ) {
+            $line = trim( $line );
+            if ( $line !== '' ) {
+                $body_paragraphs .= '<p style="margin:0 0 14px;color:#374151;font-size:15px;line-height:1.6;">' . esc_html( $line ) . '</p>';
+            }
+        }
+
+        $footer_parts = array_filter( array(
+            $company_name,
+            $company_email ? '<a href="mailto:' . esc_attr( $company_email ) . '" style="color:' . esc_attr( $brand_color ) . ';">' . esc_html( $company_email ) . '</a>' : '',
+            $company_phone ? esc_html( $company_phone ) : '',
+            $company_website ? '<a href="' . esc_url( 'https://' . ltrim( $company_website, 'https://' ) ) . '" style="color:' . esc_attr( $brand_color ) . ';">' . esc_html( $company_website ) . '</a>' : '',
+        ) );
+
+        $html = '<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:30px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+      <tr>
+        <td style="background:' . esc_attr( $brand_color ) . ';padding:28px 32px;text-align:center;">
+          ' . $logo_html . '
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:36px 32px 24px;">
+          ' . $body_paragraphs . '
+        </td>
+      </tr>
+      <tr><td style="padding:0 32px;"><hr style="border:none;border-top:1px solid #e5e7eb;margin:0;"></td></tr>
+      <tr>
+        <td style="padding:20px 32px 28px;text-align:center;">
+          <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.8;">
+            Sent by ' . implode( ' &nbsp;|&nbsp; ', $footer_parts ) . '
+          </p>
+          <p style="margin:8px 0 0;font-size:11px;color:#d1d5db;">
+            This email was sent to ' . esc_html( $to ) . ' regarding your recent order.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>';
+
+        add_filter( 'wp_mail_content_type', array( __CLASS__, 'set_html_content_type' ) );
+        wp_mail( $to, $subject, $html );
+        remove_filter( 'wp_mail_content_type', array( __CLASS__, 'set_html_content_type' ) );
+    }
+
+    // -----------------------------------------------------------------------
     // ORR-HL7: Laboratory receipt confirmation email to customer
     // -----------------------------------------------------------------------
 

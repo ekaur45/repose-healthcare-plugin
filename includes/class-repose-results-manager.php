@@ -107,6 +107,38 @@ class HN_Repose_Results_Manager {
     }
 
     // -----------------------------------------------------------------------
+    // Reject result → optionally notify patient
+    // -----------------------------------------------------------------------
+
+    public static function reject_result( int $result_id, int $rejector_id, string $reason = '', bool $notify = false ): bool {
+        global $wpdb;
+        $table  = $wpdb->prefix . 'repose_results';
+        $result = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $result_id ) );
+
+        if ( ! $result ) return false;
+
+        $wpdb->update( $table, array(
+            'status'      => 'rejected',
+            'approved_by' => $rejector_id,
+            'approved_at' => current_time( 'mysql' ),
+        ), array( 'id' => $result_id ) );
+
+        if ( $reason !== '' ) {
+            self::add_note( $result_id, $rejector_id, $reason, 'internal' );
+        }
+
+        Repose_Audit_Log::record( (int) $result->order_id, $rejector_id, 'result_rejected',
+            'Result ID ' . $result_id . ' rejected by ' . ( get_user_by( 'id', $rejector_id )->display_name ?? 'staff' )
+            . ( $reason ? ". Reason: {$reason}" : '' ) . ( $notify ? ' (patient notified)' : ' (not notified)' ) );
+
+        if ( $notify ) {
+            Repose_Notifications::notify_result_rejected( (int) $result->order_id, $reason );
+        }
+
+        return true;
+    }
+
+    // -----------------------------------------------------------------------
     // Notes
     // -----------------------------------------------------------------------
 
