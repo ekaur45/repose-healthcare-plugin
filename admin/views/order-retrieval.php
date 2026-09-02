@@ -309,7 +309,7 @@ render_orders:
         $pt_by_patient  = array();
         foreach ( $patient_tests as $pt ) { $pt_by_patient[ $pt->patient_uid ][] = $pt; }
         $result_row = $wpdb->get_row( $wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}repose_results WHERE order_id=%d ORDER BY uploaded_at DESC LIMIT 1", $oid ) );
+            "SELECT * FROM {$wpdb->prefix}repose_results WHERE order_id=%d AND deleted_at IS NULL ORDER BY uploaded_at DESC LIMIT 1", $oid ) );
         $status_color = array(
             'on-hold'    => array('#856404','#fff3cd'),
             'processing' => array('#2e7d4f','#d4edda'),

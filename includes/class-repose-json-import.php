@@ -665,7 +665,7 @@ class Repose_JSON_Import {
             ) );
         } else {
             $result = $wpdb->get_row( $wpdb->prepare(
-                "SELECT * FROM {$wpdb->prefix}repose_results WHERE id = %d AND status = 'reported'", $result_id
+                "SELECT * FROM {$wpdb->prefix}repose_results WHERE id = %d AND status = 'reported' AND deleted_at IS NULL", $result_id
             ) );
         }
 

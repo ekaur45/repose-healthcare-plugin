@@ -10,14 +10,14 @@
     if ( ! in_array( $tab, $allowed_tabs, true ) ) $tab = 'pending_review';
 
     $where_map = array(
-        'pending_review' => "status = 'pending_review'",
-        'reported'       => "status = 'reported'",
-        'rejected'       => "status = 'rejected'",
-        'all'            => '1=1',
+        'pending_review' => "status = 'pending_review' AND deleted_at IS NULL",
+        'reported'       => "status = 'reported' AND deleted_at IS NULL",
+        'rejected'       => "status = 'rejected' AND deleted_at IS NULL",
+        'all'            => 'deleted_at IS NULL',
     );
 
     $counts_raw = $wpdb->get_results(
-        "SELECT status, COUNT(*) as cnt FROM {$wpdb->prefix}repose_results GROUP BY status",
+        "SELECT status, COUNT(*) as cnt FROM {$wpdb->prefix}repose_results WHERE deleted_at IS NULL GROUP BY status",
         OBJECT_K
     );
     $cnt = function( $s ) use ( $counts_raw ) {
@@ -83,7 +83,7 @@
                     <th style="width:150px">Approved</th>
                     <th style="width:110px">Patient UID</th>
                     <th style="width:90px">Source</th>
-                    <th style="width:<?php echo ( $tab === 'pending_review' || $tab === 'all' ) ? '440px' : '130px'; ?>">Actions</th>
+                    <th style="width:<?php echo ( $tab === 'pending_review' || $tab === 'all' ) ? '540px' : '230px'; ?>">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -182,6 +182,7 @@
                         <?php else : ?>
                         <span style="font-size:11px;color:#2e7d4f;font-weight:600;">&#10003; Notified</span>
                         <?php endif; ?>
+                        <button type="button" class="button button-small button-link" style="color:#c0392b;" onclick="rhRqOpenDelete(<?php echo (int) $result->id; ?>)">Delete</button>
                     </td>
                 </tr>
                 <tr class="repose-note-row" id="note-row-<?php echo $result->id; ?>" style="display:none;">
@@ -276,6 +277,19 @@
     </div>
 </div>
 
+<!-- Delete Result modal -->
+<div id="rh-rq-delete-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;">
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:28px 32px;border-radius:8px;width:440px;max-width:90%;box-shadow:0 8px 40px rgba(0,0,0,.3);">
+        <h3 style="margin:0 0 12px;color:#c0392b;">Delete Result</h3>
+        <p style="margin:0 0 14px;font-size:13px;color:#555;">This removes the result from all queue views and the patient's account/download link. This cannot be undone from here.</p>
+        <input type="hidden" id="rh-rq-delete-id" value="">
+        <label style="display:block;margin-bottom:6px;font-weight:600;font-size:13px;">Reason (saved as an internal note)</label>
+        <textarea id="rh-rq-delete-reason" rows="4" style="width:100%;padding:10px;margin-bottom:14px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-size:13px;" placeholder="e.g. Duplicate upload, wrong patient..."></textarea>
+        <button type="button" class="button button-primary" id="rh-rq-delete-confirm" style="background:#c0392b;border-color:#c0392b;" onclick="rhRqConfirmDelete()">Confirm Delete</button>
+        <button type="button" class="button" onclick="document.getElementById('rh-rq-delete-modal').style.display='none'" style="margin-left:8px;">Cancel</button>
+    </div>
+</div>
+
 <script>
 var rhRqAjax = <?php echo json_encode(['url'=>admin_url('admin-ajax.php'),'nonce'=>wp_create_nonce('repose_admin_nonce')]); ?>;
 var rhRqSearchTimer = null;
@@ -309,14 +323,20 @@ function rhRqSearch(){
                 }
                 var html='';
                 r.data.patients.forEach(function(p){
-                    html+='<div onclick="rhRqSelectPatient('+p.id+',''+String(p.patient_uid||'').replace(/'/g,"\'")+'',''+String((p.forename+' '+p.surname)||'').replace(/'/g,"\'")+'''+')"'+
-                        ' style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:13px;"'+
-                        ' onmouseover="this.style.background='#f0f7fb'" onmouseout="this.style.background=''">' +
+                    html+='<div class="rh-rq-patient-row" data-id="'+escRqHtml(p.id)+'" data-uid="'+escRqHtml(p.patient_uid)+'" data-name="'+escRqHtml(p.forename+' '+p.surname)+'"'+
+                        ' style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:13px;">' +
                         '<strong>'+escRqHtml(p.forename+' '+p.surname)+'</strong> '+
                         '<span style="background:#e8f4f8;color:#1a6e8c;font-size:11px;padding:1px 6px;border-radius:8px;">'+escRqHtml(p.patient_uid)+'</span>'+
                         '<div style="font-size:11px;color:#888;">'+escRqHtml(p.email||'—')+'</div></div>';
                 });
                 res.innerHTML=html; res.style.display='block';
+                res.querySelectorAll('.rh-rq-patient-row').forEach(function(el){
+                    el.addEventListener('click', function(){
+                        rhRqSelectPatient(this.getAttribute('data-id'), this.getAttribute('data-uid'), this.getAttribute('data-name'));
+                    });
+                    el.addEventListener('mouseover', function(){ this.style.background='#f0f7fb'; });
+                    el.addEventListener('mouseout', function(){ this.style.background=''; });
+                });
             });
     }, 300);
 }
@@ -388,5 +408,33 @@ function rhRqConfirmReject(){
 }
 
 document.getElementById('rh-rq-reject-modal').addEventListener('click',function(e){ if(e.target===this)this.style.display='none'; });
+
+function rhRqOpenDelete(resultId){
+    document.getElementById('rh-rq-delete-id').value = resultId;
+    document.getElementById('rh-rq-delete-reason').value = '';
+    document.getElementById('rh-rq-delete-modal').style.display = 'block';
+}
+
+function rhRqConfirmDelete(){
+    var resultId = document.getElementById('rh-rq-delete-id').value;
+    var reason   = document.getElementById('rh-rq-delete-reason').value.trim();
+    var btn = document.getElementById('rh-rq-delete-confirm');
+    btn.disabled = true; btn.textContent = 'Deleting...';
+    var body = 'action=repose_delete_result&nonce=' + encodeURIComponent(rhRqAjax.nonce)
+        + '&result_id=' + encodeURIComponent(resultId)
+        + '&reason=' + encodeURIComponent(reason);
+    fetch(rhRqAjax.url,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
+        .then(function(r){return r.json();}).then(function(r){
+            btn.disabled = false; btn.textContent = 'Confirm Delete';
+            if(r && r.success){
+                document.getElementById('rh-rq-delete-modal').style.display = 'none';
+                location.reload();
+            } else {
+                alert((r && r.data) ? r.data : 'Failed.');
+            }
+        }).catch(function(){ btn.disabled=false; btn.textContent='Confirm Delete'; alert('Network error.'); });
+}
+
+document.getElementById('rh-rq-delete-modal').addEventListener('click',function(e){ if(e.target===this)this.style.display='none'; });
 </script>
 </div>

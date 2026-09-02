@@ -18,7 +18,7 @@ class Repose_DB {
 
         // ── Original Repose tables ────────────────────────────────────────
 
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_reference_counters (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_reference_counters (
             id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             ref_date    DATE            NOT NULL,
             counter     INT UNSIGNED    NOT NULL DEFAULT 0,
@@ -26,7 +26,7 @@ class Repose_DB {
             UNIQUE KEY ref_date (ref_date)
         ) {$charset};" );
 
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_order_queue (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_order_queue (
             id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             order_id      BIGINT UNSIGNED NOT NULL,
             queue_type    VARCHAR(32)     NOT NULL DEFAULT 'manual_auth',
@@ -40,7 +40,7 @@ class Repose_DB {
             KEY status (status)
         ) {$charset};" );
 
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_audit_log (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_audit_log (
             id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             order_id    BIGINT UNSIGNED,
             user_id     BIGINT UNSIGNED NOT NULL,
@@ -51,7 +51,7 @@ class Repose_DB {
             KEY order_id (order_id)
         ) {$charset};" );
 
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_results (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_results (
             id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             order_id        BIGINT UNSIGNED NOT NULL,
             reference_num   VARCHAR(64),
@@ -63,12 +63,14 @@ class Repose_DB {
             approved_by     BIGINT UNSIGNED,
             approved_at     DATETIME,
             review_email_at DATETIME,
+            deleted_at      DATETIME,
+            deleted_by      BIGINT UNSIGNED,
             PRIMARY KEY (id),
             KEY order_id (order_id),
             KEY reference_num (reference_num)
         ) {$charset};" );
 
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_result_notes (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_result_notes (
             id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             result_id   BIGINT UNSIGNED NOT NULL,
             author_id   BIGINT UNSIGNED NOT NULL,
@@ -79,7 +81,7 @@ class Repose_DB {
             KEY result_id (result_id)
         ) {$charset};" );
 
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_comment_templates (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_comment_templates (
             id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             title       VARCHAR(255)    NOT NULL,
             body        LONGTEXT        NOT NULL,
@@ -94,7 +96,7 @@ class Repose_DB {
         // All tables are prefixed with {wpdb->prefix}repose_hl7_
 
         // Raw HL7 messages — full JSON payload stored for audit and debug
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_hl7_messages (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_hl7_messages (
             id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             wc_order_id    BIGINT UNSIGNED,
             reference_num  VARCHAR(64),
@@ -106,7 +108,7 @@ class Repose_DB {
         ) {$charset};" );
 
         // Patients — demographic data from PID segment
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_hl7_patients (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_hl7_patients (
             id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             patient_id  VARCHAR(50),
             first_name  VARCHAR(100),
@@ -120,7 +122,7 @@ class Repose_DB {
         ) {$charset};" );
 
         // Visits — PV1 segment data
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_hl7_visits (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_hl7_visits (
             id               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             hl7_patient_id   BIGINT UNSIGNED,
             visit_number     VARCHAR(50),
@@ -135,7 +137,7 @@ class Repose_DB {
         ) {$charset};" );
 
         // Orders — ORC segment data
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_hl7_orders (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_hl7_orders (
             id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             hl7_visit_id        BIGINT UNSIGNED,
             wc_order_id         BIGINT UNSIGNED,
@@ -151,7 +153,7 @@ class Repose_DB {
         ) {$charset};" );
 
         // Reports — OBR segment data
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_hl7_reports (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_hl7_reports (
             id                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             hl7_order_id         BIGINT UNSIGNED,
             wc_result_id         BIGINT UNSIGNED,
@@ -167,7 +169,7 @@ class Repose_DB {
         ) {$charset};" );
 
         // Observations — OBX segment data (one row per test analyte)
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_hl7_observations (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_hl7_observations (
             id                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             hl7_report_id        BIGINT UNSIGNED,
             observation_code     VARCHAR(50),
@@ -184,7 +186,7 @@ class Repose_DB {
         ) {$charset};" );
 
         // Notes — NTE segment data (lab notes/comments)
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_hl7_notes (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_hl7_notes (
             id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             hl7_report_id BIGINT UNSIGNED,
             comment       TEXT,
@@ -195,7 +197,7 @@ class Repose_DB {
 
         // ── Patient Registry ──────────────────────────────────────────────
         // Central patient records with a unique patient ID (e.g. RHP-0001)
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_patients (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_patients (
             id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             patient_uid     VARCHAR(32)     NOT NULL,
             forename        VARCHAR(100)    NOT NULL,
@@ -215,7 +217,7 @@ class Repose_DB {
         ) {$charset};" );
 
         // Patient ↔ Order ↔ Test mapping (which patient on which order gets which test)
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_patient_tests (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_patient_tests (
             id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             patient_id      BIGINT UNSIGNED NOT NULL,
             order_id        BIGINT UNSIGNED NOT NULL,
@@ -231,7 +233,7 @@ class Repose_DB {
         ) {$charset};" );
 
         // UID counter for patient IDs
-        dbDelta( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}repose_patient_uid_counter (
+        dbDelta( "CREATE TABLE {$wpdb->prefix}repose_patient_uid_counter (
             id      INT UNSIGNED NOT NULL AUTO_INCREMENT,
             counter INT UNSIGNED NOT NULL DEFAULT 0,
             PRIMARY KEY (id)

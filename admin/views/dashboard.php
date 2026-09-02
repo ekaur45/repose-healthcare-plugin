@@ -6,7 +6,7 @@
     global $wpdb;
 
     $pending_auth    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}repose_order_queue WHERE status = 'pending' AND queue_type = 'manual_auth'" );
-    $pending_results = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}repose_results WHERE status = 'pending_review'" );
+    $pending_results = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}repose_results WHERE status = 'pending_review' AND deleted_at IS NULL" );
     $incomplete      = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}repose_order_queue WHERE status = 'pending' AND queue_type = 'incomplete'" );
     $total_patients  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}repose_patients" );
     $awaiting_orr    = (int) $wpdb->get_var(
@@ -35,7 +35,7 @@
     );
     $recent_results = (int) $wpdb->get_var(
         "SELECT COUNT(*) FROM {$wpdb->prefix}repose_results
-         WHERE uploaded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+         WHERE uploaded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND deleted_at IS NULL"
     );
     ?>
 

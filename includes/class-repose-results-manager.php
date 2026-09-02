@@ -139,6 +139,34 @@ class HN_Repose_Results_Manager {
     }
 
     // -----------------------------------------------------------------------
+    // Soft delete → hide from queue and patient-facing surfaces. One-way:
+    // no in-UI restore. The file on disk and the DB row are kept intact.
+    // -----------------------------------------------------------------------
+
+    public static function delete_result( int $result_id, int $deleter_id, string $reason = '' ): bool {
+        global $wpdb;
+        $table  = $wpdb->prefix . 'repose_results';
+        $result = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d AND deleted_at IS NULL", $result_id ) );
+
+        if ( ! $result ) return false;
+
+        $wpdb->update( $table, array(
+            'deleted_at' => current_time( 'mysql' ),
+            'deleted_by' => $deleter_id,
+        ), array( 'id' => $result_id ) );
+
+        if ( $reason !== '' ) {
+            self::add_note( $result_id, $deleter_id, $reason, 'internal' );
+        }
+
+        Repose_Audit_Log::record( (int) $result->order_id, $deleter_id, 'result_deleted',
+            'Result ID ' . $result_id . ' deleted by ' . ( get_user_by( 'id', $deleter_id )->display_name ?? 'staff' )
+            . ( $reason ? ". Reason: {$reason}" : '' ) );
+
+        return true;
+    }
+
+    // -----------------------------------------------------------------------
     // Notes
     // -----------------------------------------------------------------------
 
@@ -229,7 +257,7 @@ class HN_Repose_Results_Manager {
             ) );
         } else {
             $result = $wpdb->get_row( $wpdb->prepare(
-                "SELECT * FROM {$wpdb->prefix}repose_results WHERE id = %d AND status = 'reported'",
+                "SELECT * FROM {$wpdb->prefix}repose_results WHERE id = %d AND status = 'reported' AND deleted_at IS NULL",
                 $result_id
             ) );
         }
@@ -478,7 +506,7 @@ class HN_Repose_Results_Manager {
         $results = array();
         foreach ( $orders as $order ) {
             $rows = $wpdb->get_results( $wpdb->prepare(
-                "SELECT * FROM {$wpdb->prefix}repose_results WHERE order_id = %d AND status = 'reported'",
+                "SELECT * FROM {$wpdb->prefix}repose_results WHERE order_id = %d AND status = 'reported' AND deleted_at IS NULL",
                 $order->get_id()
             ) );
             foreach ( $rows as $row ) {
@@ -527,7 +555,7 @@ class HN_Repose_Results_Manager {
             ) );
         } else {
             $result = $wpdb->get_row( $wpdb->prepare(
-                "SELECT * FROM {$wpdb->prefix}repose_results WHERE id = %d AND status = 'reported'", $result_id
+                "SELECT * FROM {$wpdb->prefix}repose_results WHERE id = %d AND status = 'reported' AND deleted_at IS NULL", $result_id
             ) );
         }
 
