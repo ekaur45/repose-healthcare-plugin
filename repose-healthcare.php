@@ -3,7 +3,7 @@
  * Plugin Name: Repose Healthcare WooCommerce Plugin
  * Plugin URI:  https://reposehealthcare.com
  * Description: Automates order processing, laboratory integration, and diagnostic result reporting for Repose Healthcare home testing kits.
- * Version:     1.4.16
+ * Version:     1.4.18
  * Author:      Repose Healthcare
  * Text Domain: repose-healthcare
  * Requires at least: 6.0
@@ -14,7 +14,7 @@
 if (!defined('ABSPATH'))
     exit;
 
-define('REPOSE_VERSION', '1.4.16');
+define('REPOSE_VERSION', '1.4.18');
 define('REPOSE_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('REPOSE_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('REPOSE_PLUGIN_FILE', __FILE__);
@@ -124,6 +124,7 @@ function repose_init()
     require_once REPOSE_PLUGIN_DIR . 'includes/class-repose-tdl-csv.php';
     require_once REPOSE_PLUGIN_DIR . 'includes/class-repose-hl7-parser.php';
     require_once REPOSE_PLUGIN_DIR . 'includes/class-repose-hl7-inbound.php';
+    require_once REPOSE_PLUGIN_DIR . 'includes/class-repose-order-registration.php';
     require_once REPOSE_PLUGIN_DIR . 'admin/class-repose-admin.php';
 
     Repose_DB::init();
@@ -135,6 +136,7 @@ function repose_init()
     Repose_Lab_Portal::init();
     Repose_JSON_Import::init();
     Repose_HL7_Inbound::init();
+    Repose_Order_Registration::init();
 
     // Validation fires only on Place Order
     add_action(

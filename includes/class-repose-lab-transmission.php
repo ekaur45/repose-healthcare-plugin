@@ -115,6 +115,14 @@ class Repose_Lab_Transmission
         $order->update_meta_data('_repose_order_type', Repose_Order_Validator::classify($order));
         $order->save();
 
+        if (class_exists('Repose_Order_Registration')) {
+            try {
+                Repose_Order_Registration::schedule_for_order($order, $ref);
+            } catch (\Throwable $e) {
+                error_log('Repose: order registration scheduling failed — ' . $e->getMessage());
+            }
+        }
+
         // Generate TDL-format CSV using the TDL CSV generator
         $csv_path = class_exists('Repose_TDL_CSV')
             ? Repose_TDL_CSV::generate_single($order, $ref)
