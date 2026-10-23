@@ -4,7 +4,7 @@
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-$search   = sanitize_text_field( $_GET['rh_search'] ?? '' );
+$search   = sanitize_text_field( wp_unslash( $_GET['rh_search'] ?? '' ) );
 $page_num = max( 1, (int) ( $_GET['paged'] ?? 1 ) );
 $per_page = 25;
 $view_id  = (int) ( $_GET['patient_id'] ?? 0 );

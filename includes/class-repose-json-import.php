@@ -636,8 +636,8 @@ class Repose_JSON_Import {
      */
     public static function ajax_generate_hl7_pdf() {
         $result_id = (int) ( $_GET['result_id'] ?? 0 );
-        $token     = sanitize_text_field( $_GET['token'] ?? '' );
-        $nonce     = sanitize_text_field( $_GET['nonce'] ?? '' );
+        $token     = sanitize_text_field( wp_unslash( $_GET['token'] ?? '' ) );
+        $nonce     = sanitize_text_field( wp_unslash( $_GET['nonce'] ?? '' ) );
 
         // ── Auth: signed token (patient email link) OR nonce (admin) ─────────
         $is_admin    = current_user_can( 'manage_woocommerce' );

@@ -428,7 +428,7 @@ class HN_Repose_Admin
             wp_send_json_error('Unauthorized', 403);
 
         $order_id = (int) ($_POST['order_id'] ?? 0);
-        $reason = sanitize_textarea_field($_POST['reason'] ?? '');
+        $reason = sanitize_textarea_field(wp_unslash($_POST['reason'] ?? ''));
         $order = wc_get_order($order_id);
         if (!$order)
             wp_send_json_error('Order not found');
@@ -503,7 +503,7 @@ class HN_Repose_Admin
             wp_send_json_error('Unauthorized', 403);
 
         $result_id = (int) ($_POST['result_id'] ?? 0);
-        $reason    = sanitize_textarea_field($_POST['reason'] ?? '');
+        $reason    = sanitize_textarea_field(wp_unslash($_POST['reason'] ?? ''));
         $notify    = !empty($_POST['notify']);
 
         $ok = HN_Repose_Results_Manager::reject_result($result_id, get_current_user_id(), $reason, $notify);
@@ -518,7 +518,7 @@ class HN_Repose_Admin
             wp_send_json_error('Unauthorized', 403);
 
         $result_id = (int) ($_POST['result_id'] ?? 0);
-        $reason    = sanitize_textarea_field($_POST['reason'] ?? '');
+        $reason    = sanitize_textarea_field(wp_unslash($_POST['reason'] ?? ''));
 
         $ok = HN_Repose_Results_Manager::delete_result($result_id, get_current_user_id(), $reason);
         $ok ? wp_send_json_success(array('message' => 'Result deleted.'))
@@ -532,9 +532,9 @@ class HN_Repose_Admin
             wp_send_json_error('Unauthorized', 403);
 
         $order_id = (int) ($_POST['order_id'] ?? 0);
-        $test_type = sanitize_text_field($_POST['test_type'] ?? '');
+        $test_type = sanitize_text_field(wp_unslash($_POST['test_type'] ?? ''));
         $patient_id = (int) ($_POST['patient_id'] ?? 0);
-        $patient_uid = sanitize_text_field($_POST['patient_uid'] ?? '');
+        $patient_uid = sanitize_text_field(wp_unslash($_POST['patient_uid'] ?? ''));
 
         if (empty($_FILES['repose_result_file']))
             wp_send_json_error('No file uploaded.');
@@ -585,8 +585,8 @@ class HN_Repose_Admin
             wp_send_json_error('Unauthorized', 403);
 
         $result_id = (int) ($_POST['result_id'] ?? 0);
-        $note = sanitize_textarea_field($_POST['note'] ?? '');
-        $visibility = sanitize_text_field($_POST['visibility'] ?? 'internal');
+        $note = sanitize_textarea_field(wp_unslash($_POST['note'] ?? ''));
+        $visibility = sanitize_text_field(wp_unslash($_POST['visibility'] ?? 'internal'));
 
         $id = HN_Repose_Results_Manager::add_note($result_id, get_current_user_id(), $note, $visibility);
         wp_send_json_success(array('note_id' => $id));
@@ -613,9 +613,9 @@ class HN_Repose_Admin
             wp_send_json_error('Unauthorized', 403);
 
         $id = (int) ($_POST['template_id'] ?? 0);
-        $title = sanitize_text_field($_POST['title'] ?? '');
-        $body = sanitize_textarea_field($_POST['body'] ?? '');
-        $visibility = sanitize_text_field($_POST['visibility'] ?? 'patient');
+        $title = sanitize_text_field(wp_unslash($_POST['title'] ?? ''));
+        $body = sanitize_textarea_field(wp_unslash($_POST['body'] ?? ''));
+        $visibility = sanitize_text_field(wp_unslash($_POST['visibility'] ?? 'patient'));
 
         if ($id > 0) {
             Repose_Comment_Library::update($id, $title, $body, $visibility);
@@ -648,38 +648,38 @@ class HN_Repose_Admin
             wp_send_json_error('Unauthorized', 403);
 
         $settings = array(
-            'repose_lab_email' => sanitize_email($_POST['lab_email'] ?? ''),
+            'repose_lab_email' => sanitize_email(wp_unslash($_POST['lab_email'] ?? '')),
             'repose_transmission_method' => in_array($_POST['transmission_method'] ?? '', array('email', 'azure'), true) ? $_POST['transmission_method'] : 'email',
             // Azure
-            'repose_azure_account' => sanitize_text_field($_POST['azure_account'] ?? ''),
-            'repose_azure_requests_container' => sanitize_text_field($_POST['azure_requests_container'] ?? 'requests'),
-            'repose_azure_container' => sanitize_text_field($_POST['azure_container'] ?? 'results'),
-            'repose_azure_sas_token' => sanitize_text_field($_POST['azure_sas_token'] ?? ''),
-            'repose_api_token' => sanitize_text_field($_POST['api_token'] ?? ''),
+            'repose_azure_account' => sanitize_text_field(wp_unslash($_POST['azure_account'] ?? '')),
+            'repose_azure_requests_container' => sanitize_text_field(wp_unslash($_POST['azure_requests_container'] ?? 'requests')),
+            'repose_azure_container' => sanitize_text_field(wp_unslash($_POST['azure_container'] ?? 'results')),
+            'repose_azure_sas_token' => sanitize_text_field(wp_unslash($_POST['azure_sas_token'] ?? '')),
+            'repose_api_token' => sanitize_text_field(wp_unslash($_POST['api_token'] ?? '')),
             // Email templates
-            'repose_result_email_subject' => sanitize_text_field($_POST['result_ready_email_subject'] ?? ''),
-            'repose_result_email_body' => sanitize_textarea_field($_POST['result_ready_email_body'] ?? ''),
-            'repose_review_email_subject' => sanitize_text_field($_POST['review_email_subject'] ?? ''),
-            'repose_review_email_body' => sanitize_textarea_field($_POST['review_email_body'] ?? ''),
-            'repose_review_url' => esc_url_raw($_POST['review_url'] ?? 'https://g.page/r/CbeI7sxByQWwEAE/review'),
-            'repose_sample_received_email_subject' => sanitize_text_field($_POST['sample_received_email_subject'] ?? ''),
-            'repose_sample_received_email_body' => sanitize_textarea_field($_POST['sample_received_email_body'] ?? ''),
-            'repose_dispatch_email_subject' => sanitize_text_field($_POST['dispatch_email_subject'] ?? ''),
-            'repose_dispatch_email_body' => sanitize_textarea_field($_POST['dispatch_email_body'] ?? ''),
+            'repose_result_email_subject' => sanitize_text_field(wp_unslash($_POST['result_ready_email_subject'] ?? '')),
+            'repose_result_email_body' => sanitize_textarea_field(wp_unslash($_POST['result_ready_email_body'] ?? '')),
+            'repose_review_email_subject' => sanitize_text_field(wp_unslash($_POST['review_email_subject'] ?? '')),
+            'repose_review_email_body' => sanitize_textarea_field(wp_unslash($_POST['review_email_body'] ?? '')),
+            'repose_review_url' => esc_url_raw(wp_unslash($_POST['review_url'] ?? 'https://g.page/r/CbeI7sxByQWwEAE/review')),
+            'repose_sample_received_email_subject' => sanitize_text_field(wp_unslash($_POST['sample_received_email_subject'] ?? '')),
+            'repose_sample_received_email_body' => sanitize_textarea_field(wp_unslash($_POST['sample_received_email_body'] ?? '')),
+            'repose_dispatch_email_subject' => sanitize_text_field(wp_unslash($_POST['dispatch_email_subject'] ?? '')),
+            'repose_dispatch_email_body' => sanitize_textarea_field(wp_unslash($_POST['dispatch_email_body'] ?? '')),
             // Branding
-            'repose_company_name' => sanitize_text_field($_POST['company_name'] ?? ''),
-            'repose_company_address' => sanitize_textarea_field($_POST['company_address'] ?? ''),
-            'repose_company_phone' => sanitize_text_field($_POST['company_phone'] ?? ''),
-            'repose_company_email' => sanitize_email($_POST['company_email'] ?? ''),
-            'repose_company_website' => sanitize_text_field($_POST['company_website'] ?? ''),
-            'repose_logo_url' => esc_url_raw($_POST['logo_url'] ?? ''),
-            'repose_brand_color' => sanitize_hex_color($_POST['brand_color'] ?? '#1a6e8c') ?: '#1a6e8c',
+            'repose_company_name' => sanitize_text_field(wp_unslash($_POST['company_name'] ?? '')),
+            'repose_company_address' => sanitize_textarea_field(wp_unslash($_POST['company_address'] ?? '')),
+            'repose_company_phone' => sanitize_text_field(wp_unslash($_POST['company_phone'] ?? '')),
+            'repose_company_email' => sanitize_email(wp_unslash($_POST['company_email'] ?? '')),
+            'repose_company_website' => sanitize_text_field(wp_unslash($_POST['company_website'] ?? '')),
+            'repose_logo_url' => esc_url_raw(wp_unslash($_POST['logo_url'] ?? '')),
+            'repose_brand_color' => sanitize_hex_color(wp_unslash($_POST['brand_color'] ?? '#1a6e8c')) ?: '#1a6e8c',
             // Lab portal
-            'repose_lab_portal_token' => sanitize_text_field($_POST['lab_portal_token'] ?? ''),
+            'repose_lab_portal_token' => sanitize_text_field(wp_unslash($_POST['lab_portal_token'] ?? '')),
             // Outbound lab API credentials
-            'API_URL' => esc_url_raw($_POST['API_URL'] ?? ''),
-            'API_USERNAME' => sanitize_email($_POST['API_USERNAME'] ?? ''),
-            'API_PASSWORD' => sanitize_text_field($_POST['API_PASSWORD'] ?? ''),
+            'API_URL' => esc_url_raw(wp_unslash($_POST['API_URL'] ?? '')),
+            'API_USERNAME' => sanitize_email(wp_unslash($_POST['API_USERNAME'] ?? '')),
+            'API_PASSWORD' => sanitize_text_field(wp_unslash($_POST['API_PASSWORD'] ?? '')),
             // Auto-transmit
             'repose_auto_transmit' => !empty($_POST['auto_transmit']) ? '1' : '0',
         );
@@ -718,7 +718,7 @@ class HN_Repose_Admin
         if (!$order)
             wp_send_json_error('Order not found');
 
-        $staff_note = sanitize_textarea_field($_POST['edit_note'] ?? '');
+        $staff_note = sanitize_textarea_field(wp_unslash($_POST['edit_note'] ?? ''));
         $changes = array();
 
         // ── Patient meta fields ─────────────────────────────────────────────
@@ -741,7 +741,7 @@ class HN_Repose_Admin
         }
 
         // ── Billing email ───────────────────────────────────────────────────
-        $new_email = sanitize_email($_POST['email'] ?? '');
+        $new_email = sanitize_email(wp_unslash($_POST['email'] ?? ''));
         $old_email = $order->get_billing_email();
         if ($new_email && $new_email !== $old_email) {
             $changes[] = 'Email: "' . $old_email . '" → "' . $new_email . '"';
@@ -1120,7 +1120,7 @@ class HN_Repose_Admin
         if (!current_user_can('manage_woocommerce'))
             wp_send_json_error('Unauthorized', 403);
 
-        $email = sanitize_email($_POST['email'] ?? '');
+        $email = sanitize_email(wp_unslash($_POST['email'] ?? ''));
         if (!$email)
             wp_send_json_error('Email required.');
 
@@ -1212,7 +1212,7 @@ class HN_Repose_Admin
         if (!current_user_can('manage_woocommerce'))
             wp_send_json_error('Unauthorized', 403);
 
-        $mode = sanitize_text_field($_POST['mode'] ?? 'queue');   // 'queue' | 'transmit'
+        $mode = sanitize_text_field(wp_unslash($_POST['mode'] ?? 'queue'));   // 'queue' | 'transmit'
         $payload = json_decode(stripslashes($_POST['payload'] ?? '{}'), true);
 
         if (!is_array($payload) || empty($payload['email'])) {
@@ -1351,13 +1351,13 @@ class HN_Repose_Admin
             wp_send_json_error('Unauthorized', 403);
 
         $id = Repose_Patient_Registry::upsert(array(
-            'forename' => sanitize_text_field($_POST['forename'] ?? ''),
-            'surname' => sanitize_text_field($_POST['surname'] ?? ''),
-            'dob' => sanitize_text_field($_POST['dob'] ?? ''),
-            'sex' => sanitize_text_field($_POST['sex'] ?? ''),
-            'email' => sanitize_email($_POST['email'] ?? ''),
-            'phone' => sanitize_text_field($_POST['phone'] ?? ''),
-            'notes' => sanitize_textarea_field($_POST['notes'] ?? ''),
+            'forename' => sanitize_text_field(wp_unslash($_POST['forename'] ?? '')),
+            'surname' => sanitize_text_field(wp_unslash($_POST['surname'] ?? '')),
+            'dob' => sanitize_text_field(wp_unslash($_POST['dob'] ?? '')),
+            'sex' => sanitize_text_field(wp_unslash($_POST['sex'] ?? '')),
+            'email' => sanitize_email(wp_unslash($_POST['email'] ?? '')),
+            'phone' => sanitize_text_field(wp_unslash($_POST['phone'] ?? '')),
+            'notes' => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
             'wc_user_id' => !empty($_POST['wc_user_id']) ? (int) $_POST['wc_user_id'] : null,
         ));
 
@@ -1381,13 +1381,13 @@ class HN_Repose_Admin
 
         Repose_Patient_Registry::upsert(array(
             'id' => $id,
-            'forename' => sanitize_text_field($_POST['forename'] ?? ''),
-            'surname' => sanitize_text_field($_POST['surname'] ?? ''),
-            'dob' => sanitize_text_field($_POST['dob'] ?? ''),
-            'sex' => sanitize_text_field($_POST['sex'] ?? ''),
-            'email' => sanitize_email($_POST['email'] ?? ''),
-            'phone' => sanitize_text_field($_POST['phone'] ?? ''),
-            'notes' => sanitize_textarea_field($_POST['notes'] ?? ''),
+            'forename' => sanitize_text_field(wp_unslash($_POST['forename'] ?? '')),
+            'surname' => sanitize_text_field(wp_unslash($_POST['surname'] ?? '')),
+            'dob' => sanitize_text_field(wp_unslash($_POST['dob'] ?? '')),
+            'sex' => sanitize_text_field(wp_unslash($_POST['sex'] ?? '')),
+            'email' => sanitize_email(wp_unslash($_POST['email'] ?? '')),
+            'phone' => sanitize_text_field(wp_unslash($_POST['phone'] ?? '')),
+            'notes' => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
         ));
 
         wp_send_json_success(array('message' => 'Patient updated.'));
@@ -1405,7 +1405,7 @@ class HN_Repose_Admin
 
         $patient_id = (int) ($_POST['patient_id'] ?? 0);
         $order_id = (int) ($_POST['order_id'] ?? 0);
-        $test_name = sanitize_text_field($_POST['test_name'] ?? '');
+        $test_name = sanitize_text_field(wp_unslash($_POST['test_name'] ?? ''));
 
         if (!$patient_id || !$order_id || !$test_name) {
             wp_send_json_error('Patient ID, Order ID and test name are all required.');
@@ -1453,7 +1453,7 @@ class HN_Repose_Admin
                 $order->update_meta_data($meta_key, $new);
             }
         }
-        $note = sanitize_textarea_field($_POST['edit_note'] ?? '');
+        $note = sanitize_textarea_field(wp_unslash($_POST['edit_note'] ?? ''));
         if (!empty($changes)) {
             $detail = 'Pre-retransmit amendment by ' . wp_get_current_user()->display_name . ': ' . implode('; ', $changes);
             if ($note)
@@ -1466,7 +1466,7 @@ class HN_Repose_Admin
         // ── Selective patient retransmit ─────────────────────────────────
         // If include_patients is set, temporarily override additional_patients
         // on the order object so only the selected patients appear in the CSV.
-        $include_raw = sanitize_text_field($_POST['include_patients'] ?? '');
+        $include_raw = sanitize_text_field(wp_unslash($_POST['include_patients'] ?? ''));
         $original_additional = null;
 
         if ($include_raw !== '') {
@@ -1547,7 +1547,7 @@ class HN_Repose_Admin
         if (!current_user_can('manage_woocommerce'))
             wp_send_json_error('Unauthorized', 403);
 
-        $term = sanitize_text_field($_POST['term'] ?? '');
+        $term = sanitize_text_field(wp_unslash($_POST['term'] ?? ''));
         if (strlen($term) < 2) {
             wp_send_json_success(array('patients' => array()));
         }

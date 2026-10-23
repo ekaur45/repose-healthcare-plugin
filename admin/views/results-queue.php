@@ -5,7 +5,7 @@
     <?php
     global $wpdb;
 
-    $tab = sanitize_text_field( $_GET['rh_tab'] ?? 'pending_review' );
+    $tab = sanitize_text_field( wp_unslash( $_GET['rh_tab'] ?? 'pending_review' ) );
     $allowed_tabs = array( 'pending_review', 'reported', 'rejected', 'all' );
     if ( ! in_array( $tab, $allowed_tabs, true ) ) $tab = 'pending_review';
 

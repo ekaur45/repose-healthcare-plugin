@@ -7,13 +7,13 @@
     global $wpdb;
 
     // ── Mode: queue (one row per order) vs log (every audit entry) ───────────
-    $view_mode = sanitize_text_field( $_GET['view_mode'] ?? 'log' );
+    $view_mode = sanitize_text_field( wp_unslash( $_GET['view_mode'] ?? 'log' ) );
     if ( ! in_array( $view_mode, array( 'log', 'queue' ), true ) ) $view_mode = 'log';
 
     // ── Filters ──────────────────────────────────────────────────────────────
-    $filter_action  = sanitize_text_field( $_GET['filter_action']  ?? '' );
+    $filter_action  = sanitize_text_field( wp_unslash( $_GET['filter_action']  ?? '' ) );
     $filter_order   = (int) ( $_GET['filter_order']  ?? 0 );
-    $filter_result  = sanitize_text_field( $_GET['filter_result']  ?? '' ); // awaiting | received
+    $filter_result  = sanitize_text_field( wp_unslash( $_GET['filter_result']  ?? '' ) ); // awaiting | received
     $page_num       = max( 1, (int) ( $_GET['paged'] ?? 1 ) );
     $per_page       = 20;
     $offset         = ( $page_num - 1 ) * $per_page;

@@ -31,7 +31,7 @@ class Repose_Lab_Portal {
         $portal_token = get_option( 'repose_lab_portal_token', '' );
 
         // Require token in URL: /lab-portal/?token=XXXX
-        $submitted_token = sanitize_text_field( $_GET['token'] ?? '' );
+        $submitted_token = sanitize_text_field( wp_unslash( $_GET['token'] ?? '' ) );
 
         if ( ! $portal_token || ! hash_equals( $portal_token, $submitted_token ) ) {
             status_header( 403 );
@@ -45,15 +45,15 @@ class Repose_Lab_Portal {
 
     public static function handle_upload() {
         $portal_token    = get_option( 'repose_lab_portal_token', '' );
-        $submitted_token = sanitize_text_field( $_POST['portal_token'] ?? '' );
+        $submitted_token = sanitize_text_field( wp_unslash( $_POST['portal_token'] ?? '' ) );
 
         if ( ! $portal_token || ! hash_equals( $portal_token, $submitted_token ) ) {
             wp_send_json_error( 'Invalid portal token.', 403 );
         }
 
-        $ref_number = sanitize_text_field( $_POST['reference_number'] ?? '' );
-        $test_type  = sanitize_text_field( $_POST['test_type'] ?? '' );
-        $lab_name   = sanitize_text_field( $_POST['lab_name'] ?? 'Unknown Lab' );
+        $ref_number = sanitize_text_field( wp_unslash( $_POST['reference_number'] ?? '' ) );
+        $test_type  = sanitize_text_field( wp_unslash( $_POST['test_type'] ?? '' ) );
+        $lab_name   = sanitize_text_field( wp_unslash( $_POST['lab_name'] ?? 'Unknown Lab' ) );
 
         if ( ! $ref_number ) wp_send_json_error( 'Reference number is required.' );
         if ( empty( $_FILES['lab_result_pdf'] ) ) wp_send_json_error( 'No file uploaded.' );

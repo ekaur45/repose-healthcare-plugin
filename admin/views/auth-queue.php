@@ -128,7 +128,7 @@ $auto_transmit_on = get_option( 'repose_auto_transmit', '0' ) === '1';
     <?php
     global $wpdb;
 
-    $tab = sanitize_text_field( $_GET['rh_tab'] ?? 'pending' );
+    $tab = sanitize_text_field( wp_unslash( $_GET['rh_tab'] ?? 'pending' ) );
     $allowed_tabs = array( 'pending', 'approved', 'rejected', 'all' );
     if ( ! in_array( $tab, $allowed_tabs, true ) ) $tab = 'pending';
 

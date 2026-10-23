@@ -6,11 +6,11 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 // Search parameters
-$s_email      = sanitize_email( $_GET['s_email'] ?? '' );
-$s_ref        = sanitize_text_field( $_GET['s_ref'] ?? '' );
-$s_name       = sanitize_text_field( $_GET['s_name'] ?? '' );
+$s_email      = sanitize_email( wp_unslash( $_GET['s_email'] ?? '' ) );
+$s_ref        = sanitize_text_field( wp_unslash( $_GET['s_ref'] ?? '' ) );
+$s_name       = sanitize_text_field( wp_unslash( $_GET['s_name'] ?? '' ) );
 $s_order      = (int) ( $_GET['s_order'] ?? 0 );
-$s_uid        = sanitize_text_field( $_GET['s_uid'] ?? '' );
+$s_uid        = sanitize_text_field( wp_unslash( $_GET['s_uid'] ?? '' ) );
 $filter_orr   = ! empty( $_GET['filter_orr'] );   // NEW: show orders awaiting ORR confirmation
 $page_num     = max( 1, (int) ( $_GET['paged'] ?? 1 ) );
 $per_page     = 20;

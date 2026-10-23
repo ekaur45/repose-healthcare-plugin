@@ -238,7 +238,7 @@ class HN_Repose_Results_Manager {
         if ( empty( $_GET['repose_download'] ) ) return;
 
         $result_id = (int) $_GET['repose_download'];
-        $nonce     = sanitize_text_field( $_GET['nonce'] ?? '' );
+        $nonce     = sanitize_text_field( wp_unslash( $_GET['nonce'] ?? '' ) );
 
         if ( ! wp_verify_nonce( $nonce, 'repose_download_' . $result_id ) ) {
             wp_die( 'Invalid or expired request. Please try again.' );
@@ -523,8 +523,8 @@ class HN_Repose_Results_Manager {
 
     public static function ajax_serve_file() {
         $result_id = (int) ( $_GET['result_id'] ?? 0 );
-        $token     = sanitize_text_field( $_GET['token'] ?? '' );
-        $nonce     = sanitize_text_field( $_GET['nonce'] ?? '' );
+        $token     = sanitize_text_field( wp_unslash( $_GET['token'] ?? '' ) );
+        $nonce     = sanitize_text_field( wp_unslash( $_GET['nonce'] ?? '' ) );
 
         // ── Auth: accept either a signed token (patient email link) or a nonce (admin) ──
         $is_admin       = current_user_can( 'manage_woocommerce' );
