@@ -139,10 +139,16 @@
                     <td style="font-size:12px;">
                         <?php
                         // Show patient UID for this result
+                        // Per-result link first; order-level meta only for single-patient orders
                         $res_order = wc_get_order( $result->order_id );
-                        $res_patient_uid = $res_order ? $res_order->get_meta('_repose_result_patient_uid') : '';
-                        if ( ! $res_patient_uid && $res_order ) {
-                            $res_patient_uid = $res_order->get_meta('_repose_patient_1_uid');
+                        $res_patient_uid = (string) $wpdb->get_var( $wpdb->prepare(
+                            "SELECT p.patient_uid FROM {$wpdb->prefix}repose_patient_tests pt
+                             JOIN {$wpdb->prefix}repose_patients p ON p.id = pt.patient_id
+                             WHERE pt.result_id = %d LIMIT 1",
+                            $result->id
+                        ) );
+                        if ( ! $res_patient_uid && $res_order && count( Repose_JSON_Import::get_order_patients( $res_order ) ) <= 1 ) {
+                            $res_patient_uid = $res_order->get_meta('_repose_result_patient_uid') ?: $res_order->get_meta('_repose_patient_1_uid');
                         }
                         if ( $res_patient_uid ) {
                             $reg_pid = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}repose_patients WHERE patient_uid=%s", $res_patient_uid ) );

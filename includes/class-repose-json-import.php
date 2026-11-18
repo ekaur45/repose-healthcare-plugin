@@ -278,31 +278,9 @@ class Repose_JSON_Import {
         $debug['step_2_extracted_key']       = $ref_key;
         $debug['step_2_extracted_order_ref'] = $order_ref_no;
 
-        // ── Step 3: Call lab API ──────────────────────────────────────────────
-        $api_result = self::callAPi( $order_ref_no );
-        $rawMsg     = $api_result['raw']          ?? null;
-        $jsonResult = $api_result['json']         ?? array();
-
-        $debug['step_3_api_raw_response']      = $rawMsg;
-        $debug['step_3_api_json_response']      = $jsonResult;
-        $debug['step_3_api_json_empty']        = empty( $jsonResult );
-        $debug['step_3_api_json_keys']         = is_array( $jsonResult ) ? array_keys( $jsonResult ) : 'NOT_AN_ARRAY';
-        $debug['step_3_api_auth_error']        = $api_result['auth_error']    ?? null;
-        $debug['step_3_api_fetch_error']       = $api_result['fetch_error']   ?? null;
-        $debug['step_3_api_http_status_auth']  = $api_result['auth_status']   ?? null;
-        $debug['step_3_api_http_status_fetch'] = $api_result['fetch_status']  ?? null;
-
-        // Hard stop if API returned nothing — no point continuing
-        if ( empty( $jsonResult ) ) {
-            return new WP_REST_Response( array(
-                'error'  => 'Lab API returned empty or unparseable data. Check debug for raw response.',
-                'debug'  => $debug,
-            ), 502 );
-        }
-
-        // ── Step 4: Resolve reference number ─────────────────────────────────
+        // ── Step 3: Resolve reference number ─────────────────────────────────
         $ref_number = $order_ref_no;
-        $debug['step_4_reference_number'] = $ref_number;
+        $debug['step_3_reference_number'] = $ref_number;
 
         if ( ! $ref_number ) {
             return new WP_REST_Response( array(
@@ -311,134 +289,69 @@ class Repose_JSON_Import {
             ), 400 );
         }
 
-        // ── Step 5: Find matching WooCommerce order ──────────────────────────
-        $order    = null;
-        $order_id = 0;
-        $debug['step_5_order_lookup'] = array();
+        // ── Step 4: Find the order by exact reference match (no guessing) ────
+        $matching_orders = self::find_orders_by_ref( $ref_number );
 
-        // Try direct order_id field first (most reliable)
-        $direct_order_id = (int) ( $jsonResult['order_id'] ?? 0 );
-        $debug['step_5_order_lookup'][] = "direct_order_id field in HL7 json: {$direct_order_id}";
-        if ( $direct_order_id > 0 ) {
-            $try = wc_get_order( $direct_order_id );
-            if ( $try ) {
-                $order = $try; $order_id = $direct_order_id;
-                $debug['step_5_order_lookup'][] = "FOUND via direct order_id: {$order_id}";
-            }
-        }
-        if (!$order && str_starts_with($ref_number, 'RHP-')) {
-            // get test from patient registry
-            $tests = Repose_Patient_Registry::get_patient_tests_by_uid($ref_number);
-            if(count($tests) > 0) {
-                $test = $tests[0];
-                $try = wc_get_order( $test->order_id );
-                if ( $try ) {
-                    $order = $try; $order_id = $test->order_id;
-                    $debug['step_5_order_lookup'][] = "FOUND via patient registry test lookup: {$order_id}";
-                }
-            }else{
-                //get the latest by order_id
-                $latestOrderId = null;
-                foreach ($tests as $test) {
-                    if ($latestOrderId === null || $test->order_id > $latestOrderId) {
-                        $latestOrderId = $test->order_id;
-                    }
-                }
-                if($latestOrderId){
-                    $try = wc_get_order( $latestOrderId );
-                    if ( $try ) {
-                        $order = $try; $order_id = $latestOrderId;
-                        $debug['step_5_order_lookup'][] = "FOUND via patient registry latest order_id lookup: {$order_id}";
-                    }
-                }
-            }
-
-        }
-        // Try extracting order ID from reference number format RYYMMDDXXXX
-        if ( ! $order && $ref_number ) {
-            //$orderId = Repose_Reference::getOrderId($ref_number);
-            $orderIds = wc_get_orders([
-                'limit'      => 1,
-                'meta_key'   => '_repose_reference_number',
-                'meta_value' => $ref_number,
-                'return'     => 'ids',
-            ]);
-
-            $orderId = $orderIds[0] ?? 0;
-            //$extracted_id = Repose_Reference::extract_order_id( $ref_number );
-            $debug['step_5_order_lookup'][] = "order id from ref '{$ref_number}': {$orderId}";
-            if ( $orderId > 0 ) {
-                $try = wc_get_order( $orderId );
-                if ( $try ) {
-                    $order = $try; $order_id = $orderId;
-                    $debug['step_5_order_lookup'][] = "FOUND via ref extraction: {$order_id}";
-                }
-            }
+        if ( count( $matching_orders ) > 1 ) {
+            $ids = implode( ', ', array_map( function ( $o ) { return $o->get_id(); }, $matching_orders ) );
+            Repose_Audit_Log::record(
+                0, 0, 'json_result_ambiguous_order',
+                "Ref: {$ref_number}, Key: {$ref_key}. Several orders share this reference ({$ids}); nothing imported."
+            );
+            error_log( "Repose JSON import: ref '{$ref_number}' matches several orders ({$ids}). Nothing imported." );
+            return new WP_REST_Response( array(
+                'error' => 'More than one order has this reference. Nothing imported.',
+                'debug' => $debug,
+            ), 409 );
         }
 
-        // Try order.placerOrderNumber as a WC order ID (numeric)
-        if ( ! $order && ! empty( $jsonResult['order']['placerOrderNumber'] ) ) {
-            $placer_id = (int) $jsonResult['order']['placerOrderNumber'];
-            $debug['step_5_order_lookup'][] = "placerOrderNumber: {$placer_id}";
-            if ( $placer_id > 0 ) {
-                $try = wc_get_order( $placer_id );
-                if ( $try ) {
-                    $order = $try; $order_id = $placer_id;
-                    $debug['step_5_order_lookup'][] = "FOUND via placerOrderNumber: {$order_id}";
-                }
-            }
-        }
-
-        
-
-        // Last resort: meta lookup by stored reference number
-        if ( ! $order && $ref_number ) {
-            $debug['step_5_order_lookup'][] = "trying meta lookup for ref: {$ref_number}";
-            $orders = wc_get_orders( array(
-                'meta_key'   => '_repose_reference_number',
-                'meta_value' => $ref_number,
-                'limit'      => 1,
-            ) );
-            if ( ! empty( $orders ) ) {
-                $order    = $orders[0];
-                $order_id = $order->get_id();
-                $debug['step_5_order_lookup'][] = "FOUND via meta lookup: {$order_id}";
-            } else {
-                $debug['step_5_order_lookup'][] = "NOT FOUND via meta lookup";
-            }
-        }
-
-        // Try patient.patientIdentifierList  as reference number
-        $ref_number_alt = $jsonResult['patient']['patientIdentifierList'] ?? '';
-
-
-        if ( ! $order && $ref_number_alt ) {
-            $debug['step_6_order_lookup'][] = "trying meta lookup for ref: {$ref_number_alt}";
-            $orders = wc_get_orders( array(
-                'meta_key'   => '_repose_reference_number',
-                'meta_value' => $ref_number_alt,
-                'limit'      => 1,
-            ) );
-            if ( ! empty( $orders ) ) {
-                $order    = $orders[0];
-                $order_id = $order->get_id();
-                $debug['step_6_order_lookup'][] = "FOUND via meta lookup: {$order_id}";
-            } else {
-                $debug['step_6_order_lookup'][] = "NOT FOUND via meta lookup";
-            }
-        }
-
-        
+        $order = $matching_orders[0] ?? null;
 
         if ( ! $order ) {
+            Repose_Audit_Log::record(
+                0, 0, 'json_result_no_order',
+                "Ref: {$ref_number}, Key: {$ref_key}. No order with this reference on this site; nothing imported."
+            );
+            error_log( "Repose JSON import: no order found for ref '{$ref_number}' (key '{$ref_key}'). Nothing imported." );
             return new WP_REST_Response( array(
-                'error'  => 'No WooCommerce order found for this result.',
-                'debug'  => $debug,
-                'tip'    => 'Ensure the reference number matches an order with _repose_reference_number meta, or add "order_id" to the HL7 JSON.',
+                'error' => 'No WooCommerce order found for this reference.',
+                'debug' => $debug,
+                'tip'   => 'Results are only imported for an order whose _repose_reference_number matches exactly.',
             ), 404 );
         }
 
-        $debug['step_5_resolved_order_id'] = $order_id;
+        $order_id = $order->get_id();
+        $debug['step_4_resolved_order_id'] = $order_id;
+
+        // ── Step 5: Multi-patient orders take their own path ─────────────────
+        $order_patients = self::get_order_patients( $order );
+        $debug['step_5_patient_count'] = count( $order_patients );
+
+        if ( count( $order_patients ) > 1 ) {
+            return self::handle_multi_patient_import( $order, $order_patients, $data, $ref_number, $debug );
+        }
+
+        // ── Single-patient path: call lab API (unchanged endpoint) ───────────
+        $api_result = self::callAPi( $order_ref_no );
+        $rawMsg     = $api_result['raw']          ?? null;
+        $jsonResult = $api_result['json']         ?? array();
+
+        $debug['step_5_api_raw_response']      = $rawMsg;
+        $debug['step_5_api_json_response']     = $jsonResult;
+        $debug['step_5_api_json_empty']        = empty( $jsonResult );
+        $debug['step_5_api_json_keys']         = is_array( $jsonResult ) ? array_keys( $jsonResult ) : 'NOT_AN_ARRAY';
+        $debug['step_5_api_auth_error']        = $api_result['auth_error']    ?? null;
+        $debug['step_5_api_fetch_error']       = $api_result['fetch_error']   ?? null;
+        $debug['step_5_api_http_status_auth']  = $api_result['auth_status']   ?? null;
+        $debug['step_5_api_http_status_fetch'] = $api_result['fetch_status']  ?? null;
+
+        // Hard stop if API returned nothing — no point continuing
+        if ( empty( $jsonResult ) ) {
+            return new WP_REST_Response( array(
+                'error'  => 'Lab API returned empty or unparseable data. Check debug for raw response.',
+                'debug'  => $debug,
+            ), 502 );
+        }
 
         // ── Step 6: Extract test name from HL7 JSON ─────────────────────────
         $patient   = $jsonResult['patient']  ?? array();
@@ -519,6 +432,15 @@ class Repose_JSON_Import {
         $debug['step_9_hl7_order_id']    = $hl7_ids['hl7_order_id'];
         $debug['step_9_hl7_report_ids']  = $hl7_ids['hl7_report_ids'];
         $debug['step_9_hl7_db_errors']   = $hl7_ids['db_errors'] ?? array();
+
+        // Link the result to its own stored lab data (used to rebuild the report)
+        if ( ! empty( $hl7_ids['hl7_message_id'] ) ) {
+            $wpdb->update(
+                $wpdb->prefix . 'repose_results',
+                array( 'hl7_message_id' => $hl7_ids['hl7_message_id'] ),
+                array( 'id' => $result_id )
+            );
+        }
 
         // Back-fill wc_result_id on report rows
         if ( ! empty( $hl7_ids['hl7_report_ids'] ) ) {
@@ -618,6 +540,398 @@ class Repose_JSON_Import {
         ), 201 );
     }
 
+    // -----------------------------------------------------------------------
+    // Order + patient helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Orders whose _repose_reference_number equals $ref exactly.
+     * Returns at most two, so the caller can refuse when the match is ambiguous.
+     *
+     * @return WC_Order[]
+     */
+    private static function find_orders_by_ref( string $ref ): array {
+        if ( $ref === '' ) return array();
+        $orders = wc_get_orders( array(
+            'meta_key'   => '_repose_reference_number',
+            'meta_value' => $ref,
+            'limit'      => 2,
+        ) );
+        return is_array( $orders ) ? array_values( $orders ) : array();
+    }
+
+    /**
+     * One entry per patient on the order, from the same order meta that
+     * Repose_TDL_CSV::rows_for_order() sends to the lab.
+     *
+     * @return array<int, array{index:int, uid:string, forename:string, surname:string, dob:string, sex:string}>
+     */
+    public static function get_order_patients( WC_Order $order ): array {
+        $patients = array();
+
+        $patients[] = array(
+            'index'    => 1,
+            'uid'      => (string) $order->get_meta( '_repose_patient_1_uid' ),
+            'forename' => (string) ( $order->get_meta( '_repose_patient_forename' ) ?: $order->get_billing_first_name() ),
+            'surname'  => (string) ( $order->get_meta( '_repose_patient_surname' )  ?: $order->get_billing_last_name() ),
+            'dob'      => (string) $order->get_meta( '_repose_date_of_birth' ),
+            'sex'      => (string) $order->get_meta( '_repose_sex_at_birth' ),
+        );
+
+        $add_meta   = $order->get_meta( '_repose_additional_patients' );
+        $additional = is_array( $add_meta ) ? $add_meta : array();
+        foreach ( $additional as $i => $ap ) {
+            if ( ! is_array( $ap ) ) {
+                continue;
+            }
+            $pn = (int) $i + 2;
+            $patients[] = array(
+                'index'    => $pn,
+                'uid'      => (string) $order->get_meta( "_repose_patient_{$pn}_uid" ),
+                'forename' => (string) ( $ap['forename'] ?? '' ),
+                'surname'  => (string) ( $ap['surname']  ?? '' ),
+                'dob'      => (string) ( $ap['dob']      ?? '' ),
+                'sex'      => (string) ( $ap['sex']      ?? '' ),
+            );
+        }
+
+        return $patients;
+    }
+
+    /**
+     * The order patient a stored result belongs to, found through
+     * wp_repose_patient_tests.result_id. Null when no patient is linked.
+     */
+    public static function find_result_patient( int $result_id, WC_Order $order ): ?array {
+        global $wpdb;
+        $row = $wpdb->get_row( $wpdb->prepare(
+            "SELECT p.patient_uid, p.forename, p.surname, p.dob, p.sex
+             FROM {$wpdb->prefix}repose_patient_tests pt
+             JOIN {$wpdb->prefix}repose_patients p ON p.id = pt.patient_id
+             WHERE pt.result_id = %d AND pt.order_id = %d
+             LIMIT 1",
+            $result_id, $order->get_id()
+        ) );
+        if ( ! $row ) return null;
+
+        // Prefer the order's own patient details (what the lab received)
+        foreach ( self::get_order_patients( $order ) as $p ) {
+            if ( $p['uid'] !== '' && strcasecmp( $p['uid'], $row->patient_uid ) === 0 ) {
+                return $p;
+            }
+        }
+        return array(
+            'index'    => 0,
+            'uid'      => (string) $row->patient_uid,
+            'forename' => (string) $row->forename,
+            'surname'  => (string) $row->surname,
+            'dob'      => (string) $row->dob,
+            'sex'      => (string) $row->sex,
+        );
+    }
+
+    /**
+     * Lab data for one stored result, without ever borrowing another
+     * patient's data.
+     *
+     * 1. The result's own hl7_message_id link.
+     * 2. Results imported before that link existed: the old order-level
+     *    lookups, but only when the order has a single patient.
+     *
+     * @return array Lab data, or empty array when it can't be located safely.
+     */
+    private static function load_lab_data_for_result( object $result, WC_Order $order ): array {
+        global $wpdb;
+
+        if ( ! empty( $result->hl7_message_id ) ) {
+            $msg = $wpdb->get_var( $wpdb->prepare(
+                "SELECT message FROM {$wpdb->prefix}repose_hl7_messages WHERE id = %d",
+                (int) $result->hl7_message_id
+            ) );
+            $data = $msg ? json_decode( $msg, true ) : null;
+            return is_array( $data ) ? $data : array();
+        }
+
+        if ( count( self::get_order_patients( $order ) ) > 1 ) {
+            return array();
+        }
+
+        $results_dir   = trailingslashit( wp_upload_dir()['basedir'] ) . 'repose-results/';
+        $json_filename = $order->get_meta( '_repose_last_json_filename' );
+        if ( $json_filename && file_exists( $results_dir . $json_filename ) ) {
+            $stored = json_decode( file_get_contents( $results_dir . $json_filename ), true );
+            $data   = $stored['hl7_result'] ?? $stored;
+            if ( is_array( $data ) && ! empty( $data ) ) return $data;
+        }
+
+        $msg = $wpdb->get_var( $wpdb->prepare(
+            "SELECT message FROM {$wpdb->prefix}repose_hl7_messages
+             WHERE wc_order_id = %d ORDER BY id DESC LIMIT 1",
+            $order->get_id()
+        ) );
+        $data = $msg ? json_decode( $msg, true ) : null;
+        return is_array( $data ) ? $data : array();
+    }
+
+    /**
+     * The patient to print on a rebuilt report.
+     * Returns false when the order has several patients and none is linked
+     * to this result — the caller must refuse rather than guess.
+     *
+     * @return array|null|false  patient array, null = single-patient default, false = refuse
+     */
+    private static function report_patient_for_result( object $result, WC_Order $order ) {
+        // Single-patient orders keep today's report header (Patient 1 meta)
+        if ( count( self::get_order_patients( $order ) ) <= 1 ) return null;
+        $patient = self::find_result_patient( (int) $result->id, $order );
+        return $patient ?: false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Multi-patient import (several patients share one reference)
+    // -----------------------------------------------------------------------
+
+    private static function handle_multi_patient_import( WC_Order $order, array $patients, array $trigger, string $ref, array $debug ) {
+        $api = self::callApiMulti( $ref );
+
+        $debug['multi_api_item_count']   = count( $api['items'] );
+        $debug['multi_api_auth_error']   = $api['auth_error']   ?? null;
+        $debug['multi_api_fetch_error']  = $api['fetch_error']  ?? null;
+        $debug['multi_api_auth_status']  = $api['auth_status']  ?? null;
+        $debug['multi_api_fetch_status'] = $api['fetch_status'] ?? null;
+
+        if ( empty( $api['items'] ) ) {
+            $debug['multi_api_raw_response'] = $api['raw'];
+            return new WP_REST_Response( array(
+                'error' => 'Lab API returned no results for this reference. Check debug for raw response.',
+                'debug' => $debug,
+            ), 502 );
+        }
+
+        $outcomes = array();
+        foreach ( $api['items'] as $i => $item ) {
+            $json = ( is_array( $item ) && isset( $item['json'] ) && is_array( $item['json'] ) ) ? $item['json'] : array();
+            if ( empty( $json ) ) {
+                $outcomes[] = array( 'uid' => null, 'outcome' => 'skipped_no_match', 'result_id' => null, 'note' => "item {$i} has no lab data" );
+                continue;
+            }
+            $outcomes[] = self::import_single_result( $order, $patients, $json, $trigger, $ref );
+        }
+
+        return new WP_REST_Response( array(
+            'success'   => true,
+            'order_id'  => $order->get_id(),
+            'reference' => $ref,
+            'results'   => $outcomes,
+            'debug'     => $debug,
+        ), 200 );
+    }
+
+    /**
+     * Import one lab result from a multi-patient reference.
+     *
+     * @return array{uid:?string, outcome:string, result_id:?int}
+     */
+    private static function import_single_result( WC_Order $order, array $patients, array $json, array $trigger, string $ref ): array {
+        global $wpdb;
+        $order_id = $order->get_id();
+
+        $lab_patient = $json['patient'] ?? array();
+        $lab_id      = self::lab_patient_id( $lab_patient );
+        $lab_first   = (string) ( $lab_patient['patientName']['givenName']  ?? '' );
+        $lab_last    = (string) ( $lab_patient['patientName']['familyName'] ?? '' );
+        $lab_dob     = (string) ( $lab_patient['dateOfBirth'] ?? '' );
+        $lab_desc    = "Ref: {$ref}, lab patient ID: '{$lab_id}', name: '{$lab_first} {$lab_last}', DOB: '{$lab_dob}'";
+
+        // ── Step A: identify the patient on this order ───────────────────────
+        $patient = null;
+        if ( $lab_id !== '' ) {
+            foreach ( $patients as $p ) {
+                if ( $p['uid'] !== '' && strcasecmp( $p['uid'], $lab_id ) === 0 ) {
+                    $patient = $p;
+                    break;
+                }
+            }
+        }
+
+        if ( ! $patient ) {
+            $want_first = self::clean_name( $lab_first );
+            $want_last  = self::clean_name( $lab_last );
+            $want_dob   = self::dob_to_ymd( $lab_dob );
+            if ( $want_first !== '' && $want_last !== '' && $want_dob !== '' ) {
+                $hits = array();
+                foreach ( $patients as $p ) {
+                    if ( self::clean_name( $p['forename'] ) === $want_first
+                        && self::clean_name( $p['surname'] ) === $want_last
+                        && self::dob_to_ymd( $p['dob'] ) === $want_dob ) {
+                        $hits[] = $p;
+                    }
+                }
+                if ( count( $hits ) === 1 ) {
+                    $patient = $hits[0];
+                }
+            }
+        }
+
+        if ( ! $patient ) {
+            Repose_Audit_Log::record( $order_id, 0, 'json_result_skipped_no_match', $lab_desc );
+            error_log( "Repose JSON import: result not matched to any patient on order {$order_id}. {$lab_desc}" );
+            return array( 'uid' => $lab_id ?: null, 'outcome' => 'skipped_no_match', 'result_id' => null );
+        }
+
+        $uid = $patient['uid'];
+
+        // ── Step B: registry rows + already imported? ────────────────────────
+        $reg = $uid !== '' ? Repose_Patient_Registry::get_by_uid( $uid ) : null;
+        $pt_rows = array();
+        if ( $reg ) {
+            $pt_rows = $wpdb->get_results( $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}repose_patient_tests WHERE patient_id = %d AND order_id = %d ORDER BY id ASC",
+                $reg->id, $order_id
+            ) ) ?: array();
+        }
+
+        if ( ! $reg || empty( $pt_rows ) ) {
+            // Without a registry link the result can't be tied to this patient,
+            // and a re-run would import it again — so don't import.
+            Repose_Audit_Log::record( $order_id, 0, 'json_result_skipped_not_registered', "UID: {$uid}. {$lab_desc}" );
+            error_log( "Repose JSON import: patient {$uid} has no registry test rows on order {$order_id}; result not imported. {$lab_desc}" );
+            return array( 'uid' => $uid ?: null, 'outcome' => 'skipped_not_registered', 'result_id' => null );
+        }
+
+        $existing = $wpdb->get_var( $wpdb->prepare(
+            "SELECT r.id
+             FROM {$wpdb->prefix}repose_patient_tests pt
+             JOIN {$wpdb->prefix}repose_results r ON r.id = pt.result_id
+             WHERE pt.patient_id = %d AND pt.order_id = %d AND r.deleted_at IS NULL
+             LIMIT 1",
+            $reg->id, $order_id
+        ) );
+
+        if ( $existing ) {
+            Repose_Audit_Log::record( $order_id, 0, 'json_result_skipped_exists', "UID: {$uid}, existing Result ID: {$existing}, Ref: {$ref}" );
+            return array( 'uid' => $uid, 'outcome' => 'skipped_exists', 'result_id' => (int) $existing );
+        }
+
+        // ── Step C: import ───────────────────────────────────────────────────
+        $reports   = $json['reports'] ?? array();
+        $test_name = ! empty( $reports[0]['universalServiceId']['text'] )
+                     ? $reports[0]['universalServiceId']['text']
+                     : 'Lab Result';
+
+        $results_dir = trailingslashit( wp_upload_dir()['basedir'] ) . 'repose-results/';
+        wp_mkdir_p( $results_dir );
+        if ( ! file_exists( $results_dir . '.htaccess' ) ) {
+            file_put_contents( $results_dir . '.htaccess', "deny from all\n" );
+        }
+
+        $filename = sanitize_file_name( 'json-result-' . $order_id . '-' . $uid . '-' . time() . '.html' );
+        file_put_contents( $results_dir . $filename, self::build_html_report( $json, $order, $patient ) );
+
+        $insert_ok = $wpdb->insert( $wpdb->prefix . 'repose_results', array(
+            'order_id'      => $order_id,
+            'reference_num' => $ref,
+            'test_type'     => $test_name,
+            'file_path'     => $filename,
+            'status'        => 'pending_review',
+            'uploaded_by'   => 0,
+            'uploaded_at'   => current_time( 'mysql' ),
+        ) );
+        $result_id = (int) $wpdb->insert_id;
+
+        if ( $insert_ok === false || ! $result_id ) {
+            Repose_Audit_Log::record( $order_id, 0, 'json_result_insert_failed', "UID: {$uid}, Ref: {$ref}, DB: {$wpdb->last_error}" );
+            error_log( "Repose JSON import: failed to insert result for {$uid} on order {$order_id}: {$wpdb->last_error}" );
+            return array( 'uid' => $uid, 'outcome' => 'error_insert_failed', 'result_id' => null );
+        }
+
+        $hl7_ids = self::process_lab_data( $json, $order_id, $ref, $result_id );
+
+        if ( ! empty( $hl7_ids['hl7_message_id'] ) ) {
+            $wpdb->update(
+                $wpdb->prefix . 'repose_results',
+                array( 'hl7_message_id' => $hl7_ids['hl7_message_id'] ),
+                array( 'id' => $result_id )
+            );
+        }
+        foreach ( $hl7_ids['hl7_report_ids'] as $rpt_id ) {
+            $wpdb->update(
+                $wpdb->prefix . 'repose_hl7_reports',
+                array( 'wc_result_id' => $result_id ),
+                array( 'id' => $rpt_id )
+            );
+        }
+
+        // Link this patient's test row: matching test name, else their first row
+        $target = $pt_rows[0];
+        foreach ( $pt_rows as $row ) {
+            if ( stripos( $row->test_name, $test_name ) !== false || stripos( $test_name, $row->test_name ) !== false ) {
+                $target = $row;
+                break;
+            }
+        }
+        $wpdb->update(
+            $wpdb->prefix . 'repose_patient_tests',
+            array( 'status' => 'complete', 'result_id' => $result_id ),
+            array( 'id' => $target->id )
+        );
+
+        // Kept for compatibility only — nothing in the multi-patient path reads these
+        $order->update_meta_data( '_repose_last_json_result_id', $result_id );
+        $order->update_meta_data( '_repose_hl7_message_id',      $hl7_ids['hl7_message_id'] );
+        $order->update_meta_data( '_repose_hl7_patient_id',      $hl7_ids['hl7_patient_id'] );
+        $order->save();
+
+        $name = trim( $patient['forename'] . ' ' . $patient['surname'] );
+        Repose_Audit_Log::record(
+            $order_id, 0, 'json_result_imported',
+            "Ref: {$ref}, UID: {$uid}, Test: {$test_name}, Result ID: {$result_id}, HL7 msg: {$hl7_ids['hl7_message_id']}"
+        );
+        $order->add_order_note(
+            "Repose: JSON result imported for {$uid} ({$name}). Test: {$test_name}, Result ID: {$result_id}. Pending admin review."
+        );
+
+        return array( 'uid' => $uid, 'outcome' => 'imported', 'result_id' => $result_id );
+    }
+
+    /**
+     * RHP ID from the lab file: PID-3 (patientIdentifierList), falling back
+     * to PID-2 (patientId). Only the first component (before '^') is used.
+     */
+    private static function lab_patient_id( array $lab_patient ): string {
+        $pick = function ( $v ) {
+            if ( is_array( $v ) ) {
+                $first = reset( $v );
+                if ( is_array( $first ) ) {
+                    $v = $first['idNumber'] ?? $first['id'] ?? reset( $first );
+                } else {
+                    $v = $v['idNumber'] ?? $v['id'] ?? $first;
+                }
+            }
+            $v = is_scalar( $v ) ? (string) $v : '';
+            return trim( explode( '^', $v )[0] );
+        };
+        $id = $pick( $lab_patient['patientIdentifierList'] ?? '' );
+        if ( $id === '' ) {
+            $id = $pick( $lab_patient['patientId'] ?? '' );
+        }
+        return $id;
+    }
+
+    /** Name cleaned the same way it was sent to the lab, for comparison. */
+    private static function clean_name( string $name ): string {
+        return strtolower( trim( Repose_TDL_CSV::latin_only( $name ) ) );
+    }
+
+    /** DOB as YYYYMMDD digits. Accepts YYYYMMDD[...], YYYY-MM-DD and DD/MM/YYYY. */
+    private static function dob_to_ymd( string $dob ): string {
+        $dob = trim( $dob );
+        if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})/', $dob, $m ) ) return $m[1] . $m[2] . $m[3];
+        if ( preg_match( '/^(\d{2})\/(\d{2})\/(\d{4})$/', $dob, $m ) ) return $m[3] . $m[2] . $m[1];
+        if ( preg_match( '/^(\d{8})/', $dob, $m ) ) return $m[1];
+        return '';
+    }
+
     /**
      * AJAX handler: generate (or serve cached) PDF from stored HL7 data.
      *
@@ -693,46 +1007,21 @@ class Repose_JSON_Import {
             return;
         }
 
-        // ── Regenerate PDF from stored raw HL7 JSON ──────────────────────────
-        // Find the companion raw JSON file via order meta
-        $wc_order      = wc_get_order( $result->order_id );
-        $json_filename = $wc_order ? $wc_order->get_meta( '_repose_last_json_filename' ) : '';
-        $json_path     = $json_filename ? ( $results_dir . $json_filename ) : '';
+        // ── Regenerate from this result's own lab data ───────────────────────
+        $wc_order = wc_get_order( $result->order_id );
+        $lab_data = $wc_order ? self::load_lab_data_for_result( $result, $wc_order ) : array();
+        $patient  = $wc_order ? self::report_patient_for_result( $result, $wc_order ) : false;
 
-        $lab_data = array();
-        if ( $json_path && file_exists( $json_path ) ) {
-            $stored   = json_decode( file_get_contents( $json_path ), true );
-            $lab_data = $stored['hl7_result'] ?? $stored;
-        }
-
-        // If no stored JSON, try to re-fetch from the lab API using the HL7 message table
-        if ( empty( $lab_data ) ) {
-            $hl7_msg = $wpdb->get_var( $wpdb->prepare(
-                "SELECT message FROM {$wpdb->prefix}repose_hl7_messages
-                 WHERE wc_order_id = %d ORDER BY id DESC LIMIT 1",
-                $result->order_id
-            ) );
-            if ( $hl7_msg ) {
-                $lab_data = json_decode( $hl7_msg, true );
-            }
-        }
-
-        if ( empty( $lab_data ) || empty( $wc_order ) ) {
+        if ( empty( $lab_data ) || $patient === false ) {
             wp_die( '<p><strong>Cannot regenerate PDF.</strong></p>
-                     <p>The original HL7 JSON could not be located. Please re-import the result.</p>' );
+                     <p>The original lab data for this result could not be located. Please re-import the result.</p>' );
         }
 
         // Regenerate
-        $new_filename = sanitize_file_name( 'json-result-' . $result->order_id . '-' . time() . '.pdf' );
+        $uid_part     = $patient ? '-' . $patient['uid'] : '';
+        $new_filename = sanitize_file_name( 'json-result-' . $result->order_id . $uid_part . '-' . time() . '.html' );
         $new_filepath = $results_dir . $new_filename;
-
-        //$pdf_result = self::generate_pdf( $lab_data, $wc_order, $new_filepath );
-        //if ( is_wp_error( $pdf_result ) ) {
-            // Fall back to HTML
-            $new_filename = str_replace( '.pdf', '.html', $new_filename );
-            $new_filepath = $results_dir . $new_filename;
-            file_put_contents( $new_filepath, self::build_html_report( $lab_data, $wc_order ) );
-        //}
+        file_put_contents( $new_filepath, self::build_html_report( $lab_data, $wc_order, $patient ) );
 
         // Update DB row with new filename
         $wpdb->update(
@@ -768,34 +1057,13 @@ class Repose_JSON_Import {
         $wc_order = wc_get_order( $result->order_id );
         if ( ! $wc_order ) return false;
 
-        $results_dir   = trailingslashit( wp_upload_dir()['basedir'] ) . 'repose-results/';
-        $lab_data      = array();
+        $lab_data = self::load_lab_data_for_result( $result, $wc_order );
+        $patient  = self::report_patient_for_result( $result, $wc_order );
 
-        // 1. Try companion raw JSON file stored at import time
-        $json_filename = $wc_order->get_meta( '_repose_last_json_filename' );
-        if ( $json_filename ) {
-            $json_path = $results_dir . $json_filename;
-            if ( file_exists( $json_path ) ) {
-                $stored   = json_decode( file_get_contents( $json_path ), true );
-                $lab_data = $stored['hl7_result'] ?? $stored;
-            }
-        }
+        // Refuse rather than risk showing another patient's data
+        if ( empty( $lab_data ) || $patient === false ) return false;
 
-        // 2. Fall back to raw HL7 message stored in the DB
-        if ( empty( $lab_data ) ) {
-            $hl7_msg = $wpdb->get_var( $wpdb->prepare(
-                "SELECT message FROM {$wpdb->prefix}repose_hl7_messages
-                 WHERE wc_order_id = %d ORDER BY id DESC LIMIT 1",
-                $result->order_id
-            ) );
-            if ( $hl7_msg ) {
-                $lab_data = json_decode( $hl7_msg, true );
-            }
-        }
-
-        if ( empty( $lab_data ) ) return false;
-
-        return self::build_html_report( $lab_data, $wc_order );
+        return self::build_html_report( $lab_data, $wc_order, $patient );
     }
 
     /**
@@ -835,41 +1103,11 @@ class Repose_JSON_Import {
             'auth_body'    => null,
         );
 
-        $api_url      = get_option( 'API_URL',      'http://35.178.62.52/api' );
-        $api_username = get_option( 'API_USERNAME',  'admin@admin.com' );
-        $api_password = get_option( 'API_PASSWORD',  'admin' );
-
-        if ( ! $api_url || ! $api_username || ! $api_password ) {
-            $base['auth_error'] = 'API credentials not configured in WordPress options.';
-            error_log( 'Repose: ' . $base['auth_error'] );
-            return $base;
-        }
-
-        // ── Step A: Authenticate ─────────────────────────────────────────────
-        $auth_url      = rtrim( $api_url, '/' ) . '/auth/login';
-        $auth_response = wp_remote_post( $auth_url, array(
-            'body'    => array( 'email' => $api_username, 'password' => $api_password ),
-            'timeout' => 30,
-        ) );
-
-        if ( is_wp_error( $auth_response ) ) {
-            $base['auth_error'] = $auth_response->get_error_message();
-            error_log( 'Repose callAPi auth WP_Error: ' . $base['auth_error'] );
-            return $base;
-        }
-
-        $base['auth_status'] = wp_remote_retrieve_response_code( $auth_response );
-        $auth_body_raw       = wp_remote_retrieve_body( $auth_response );
-        $base['auth_body']   = $auth_body_raw;  // exposed in debug so you can see the full login response
-        $auth_data           = json_decode( $auth_body_raw, true );
-        $access_token        = $auth_data['data']['access_token'] ?? '';
-
+        $access_token = self::get_api_token( $base );
         if ( ! $access_token ) {
-            $base['auth_error'] = "Auth succeeded (HTTP {$base['auth_status']}) but no access_token found. "
-                                . "auth_body: " . substr( $auth_body_raw, 0, 500 );
-            error_log( 'Repose callAPi: ' . $base['auth_error'] );
             return $base;
         }
+        $api_url = get_option( 'API_URL', 'http://35.178.62.52/api' );
 
         // ── Step B: Fetch HL7 file by key ────────────────────────────────────
         $fetch_url       = rtrim( $api_url, '/' ) . '/hl7/file/' . rawurlencode( $key );
@@ -895,6 +1133,19 @@ class Repose_JSON_Import {
             return $base;
         }
 
+        // The middleware answers HTTP 200 even for errors (e.g. 403 site check),
+        // with { success: false, ... }. Never treat that envelope as lab data.
+        if ( is_array( $parsed ) && array_key_exists( 'success', $parsed ) && $parsed['success'] === false ) {
+            $base['fetch_error'] = 'Middleware returned an error: ' . substr( $raw_body, 0, 500 );
+            error_log( 'Repose callAPi: ' . $base['fetch_error'] );
+            return $base;
+        }
+        // { data: { raw, json: null } } means no result stored for this key yet
+        if ( is_array( $parsed['data'] ?? null ) && array_key_exists( 'json', $parsed['data'] ) && empty( $parsed['data']['json'] ) ) {
+            $base['fetch_error'] = 'Middleware has no result for this key yet.';
+            return $base;
+        }
+
         // Try every plausible path in the response envelope:
         // $parsed['data']['json'], $parsed['data'], $parsed itself
         if ( ! empty( $parsed['data']['json'] ) && is_array( $parsed['data']['json'] ) ) {
@@ -905,6 +1156,109 @@ class Repose_JSON_Import {
             $base['json'] = $parsed;
         } else {
             $base['fetch_error'] = 'Response body could not be parsed as JSON or was empty. Raw: ' . substr( $raw_body, 0, 500 );
+        }
+
+        return $base;
+    }
+
+    /**
+     * Log in to the lab API. Fills auth_* keys on $base; returns the access
+     * token, or '' on failure.
+     */
+    private static function get_api_token( array &$base ): string {
+        $api_url      = get_option( 'API_URL',      'http://35.178.62.52/api' );
+        $api_username = get_option( 'API_USERNAME',  'admin@admin.com' );
+        $api_password = get_option( 'API_PASSWORD',  'admin' );
+
+        if ( ! $api_url || ! $api_username || ! $api_password ) {
+            $base['auth_error'] = 'API credentials not configured in WordPress options.';
+            error_log( 'Repose: ' . $base['auth_error'] );
+            return '';
+        }
+
+        $auth_url      = rtrim( $api_url, '/' ) . '/auth/login';
+        $auth_response = wp_remote_post( $auth_url, array(
+            'body'    => array( 'email' => $api_username, 'password' => $api_password ),
+            'timeout' => 30,
+        ) );
+
+        if ( is_wp_error( $auth_response ) ) {
+            $base['auth_error'] = $auth_response->get_error_message();
+            error_log( 'Repose API auth WP_Error: ' . $base['auth_error'] );
+            return '';
+        }
+
+        $base['auth_status'] = wp_remote_retrieve_response_code( $auth_response );
+        $auth_body_raw       = wp_remote_retrieve_body( $auth_response );
+        $base['auth_body']   = $auth_body_raw;  // exposed in debug so you can see the full login response
+        $auth_data           = json_decode( $auth_body_raw, true );
+        $access_token        = $auth_data['data']['access_token'] ?? '';
+
+        if ( ! $access_token ) {
+            $base['auth_error'] = "Auth succeeded (HTTP {$base['auth_status']}) but no access_token found. "
+                                . "auth_body: " . substr( $auth_body_raw, 0, 500 );
+            error_log( 'Repose API: ' . $base['auth_error'] );
+            return '';
+        }
+
+        return $access_token;
+    }
+
+    /**
+     * Fetch every result for a reference (GET /hl7/files/{ref}).
+     * 'items' is the list from the response's data field; empty on failure.
+     */
+    private static function callApiMulti( string $ref ): array {
+        $base = array(
+            'items'        => array(),
+            'raw'          => null,
+            'auth_error'   => null,
+            'fetch_error'  => null,
+            'auth_status'  => null,
+            'fetch_status' => null,
+            'auth_body'    => null,
+        );
+
+        $access_token = self::get_api_token( $base );
+        if ( ! $access_token ) {
+            return $base;
+        }
+
+        $api_url   = get_option( 'API_URL', 'http://35.178.62.52/api' );
+        $fetch_url = rtrim( $api_url, '/' ) . '/hl7/files/' . rawurlencode( $ref );
+        $response  = wp_remote_get( $fetch_url, array(
+            'headers' => array( 'Authorization' => 'Bearer ' . $access_token ),
+            'timeout' => 30,
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            $base['fetch_error'] = $response->get_error_message();
+            error_log( 'Repose callApiMulti fetch WP_Error: ' . $base['fetch_error'] );
+            return $base;
+        }
+
+        $base['fetch_status'] = wp_remote_retrieve_response_code( $response );
+        $raw_body             = wp_remote_retrieve_body( $response );
+        $base['raw']          = $raw_body;
+
+        if ( $base['fetch_status'] !== 200 ) {
+            $base['fetch_error'] = "HTTP {$base['fetch_status']} from {$fetch_url}. Body: " . substr( $raw_body, 0, 500 );
+            error_log( 'Repose callApiMulti: ' . $base['fetch_error'] );
+            return $base;
+        }
+
+        $parsed = json_decode( $raw_body, true );
+        // HTTP 200 + { success: false } is how the middleware reports errors (e.g. 403 site check)
+        if ( is_array( $parsed ) && array_key_exists( 'success', $parsed ) && $parsed['success'] === false ) {
+            $base['fetch_error'] = 'Middleware returned an error: ' . substr( $raw_body, 0, 500 );
+            error_log( 'Repose callApiMulti: ' . $base['fetch_error'] );
+            return $base;
+        }
+        $items  = $parsed['data'] ?? null;
+        if ( is_array( $items ) && array_is_list( $items ) ) {
+            $base['items'] = $items;
+        } else {
+            $base['fetch_error'] = 'Response data is not a list. Raw: ' . substr( $raw_body, 0, 500 );
         }
 
         return $base;
@@ -1205,14 +1559,25 @@ PY;
     // HTML report fallback (used when PDF generation unavailable)
     // -----------------------------------------------------------------------
 
-    private static function build_html_report( array $data, WC_Order $order ): string {
+    /**
+     * @param array|null $order_patient  The order patient this result belongs to
+     *                                   (multi-patient orders). Null = Patient 1 meta, as before.
+     */
+    private static function build_html_report( array $data, WC_Order $order, ?array $order_patient = null ): string {
         $patient  = $data['patient'] ?? array();
         $reports  = $data['reports'] ?? array();
         $ref      = $order->get_meta('_repose_reference_number');
-        $forename = $order->get_meta('_repose_patient_forename') ?: ($patient['patientName']['givenName']  ?? '');
-        $surname  = $order->get_meta('_repose_patient_surname')  ?: ($patient['patientName']['familyName'] ?? '');
-        $dob      = $order->get_meta('_repose_date_of_birth')    ?: self::format_dob( $patient['dateOfBirth'] ?? '' );
-        $sex      = $order->get_meta('_repose_sex_at_birth')     ?: ($patient['sex'] ?? '');
+        if ( $order_patient ) {
+            $forename = $order_patient['forename'] ?: ($patient['patientName']['givenName']  ?? '');
+            $surname  = $order_patient['surname']  ?: ($patient['patientName']['familyName'] ?? '');
+            $dob      = $order_patient['dob']      ?: self::format_dob( $patient['dateOfBirth'] ?? '' );
+            $sex      = $order_patient['sex']      ?: ($patient['sex'] ?? '');
+        } else {
+            $forename = $order->get_meta('_repose_patient_forename') ?: ($patient['patientName']['givenName']  ?? '');
+            $surname  = $order->get_meta('_repose_patient_surname')  ?: ($patient['patientName']['familyName'] ?? '');
+            $dob      = $order->get_meta('_repose_date_of_birth')    ?: self::format_dob( $patient['dateOfBirth'] ?? '' );
+            $sex      = $order->get_meta('_repose_sex_at_birth')     ?: ($patient['sex'] ?? '');
+        }
         $email    = $order->get_billing_email();
         $company  = get_option('repose_company_name',    'Repose Healthcare Ltd');
         $address  = get_option('repose_company_address', '');

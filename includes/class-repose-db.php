@@ -65,9 +65,11 @@ class Repose_DB {
             review_email_at DATETIME,
             deleted_at      DATETIME,
             deleted_by      BIGINT UNSIGNED,
+            hl7_message_id  BIGINT UNSIGNED DEFAULT NULL,
             PRIMARY KEY (id),
             KEY order_id (order_id),
-            KEY reference_num (reference_num)
+            KEY reference_num (reference_num),
+            KEY hl7_message_id (hl7_message_id)
         ) {$charset};" );
 
         dbDelta( "CREATE TABLE {$wpdb->prefix}repose_result_notes (
