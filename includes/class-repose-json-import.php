@@ -826,7 +826,7 @@ class Repose_JSON_Import {
         }
 
         $filename = sanitize_file_name( 'json-result-' . $order_id . '-' . $uid . '-' . time() . '.html' );
-        file_put_contents( $results_dir . $filename, self::build_html_report( $json, $order, $patient ) );
+        file_put_contents( $results_dir . $filename, self::build_html_report( $json, $order ) );
 
         $insert_ok = $wpdb->insert( $wpdb->prefix . 'repose_results', array(
             'order_id'      => $order_id,
@@ -1021,7 +1021,7 @@ class Repose_JSON_Import {
         $uid_part     = $patient ? '-' . $patient['uid'] : '';
         $new_filename = sanitize_file_name( 'json-result-' . $result->order_id . $uid_part . '-' . time() . '.html' );
         $new_filepath = $results_dir . $new_filename;
-        file_put_contents( $new_filepath, self::build_html_report( $lab_data, $wc_order, $patient ) );
+        file_put_contents( $new_filepath, self::build_html_report( $lab_data, $wc_order ) );
 
         // Update DB row with new filename
         $wpdb->update(
@@ -1063,7 +1063,7 @@ class Repose_JSON_Import {
         // Refuse rather than risk showing another patient's data
         if ( empty( $lab_data ) || $patient === false ) return false;
 
-        return self::build_html_report( $lab_data, $wc_order, $patient );
+        return self::build_html_report( $lab_data, $wc_order );
     }
 
     /**
@@ -1350,10 +1350,10 @@ class Repose_JSON_Import {
         $patient  = $data['patient'] ?? array();
         $reports  = $data['reports'] ?? array();
         $order_meta = array(
-            'forename' => $order->get_meta('_repose_patient_forename') ?: ($patient['patientName']['givenName']  ?? ''),
-            'surname'  => $order->get_meta('_repose_patient_surname')  ?: ($patient['patientName']['familyName'] ?? ''),
-            'dob'      => $order->get_meta('_repose_date_of_birth')    ?: self::format_dob( $patient['dateOfBirth'] ?? '' ),
-            'sex'      => $order->get_meta('_repose_sex_at_birth')     ?: ($patient['sex'] ?? ''),
+            'forename' => (string) ( $patient['patientName']['givenName']  ?? '' ),
+            'surname'  => (string) ( $patient['patientName']['familyName'] ?? '' ),
+            'dob'      => self::format_dob( (string) ( $patient['dateOfBirth'] ?? '' ) ),
+            'sex'      => self::format_sex( (string) ( $patient['sex'] ?? '' ) ),
             'email'    => $order->get_billing_email(),
             'ref'      => $order->get_meta('_repose_reference_number'),
         );
@@ -1563,21 +1563,15 @@ PY;
      * @param array|null $order_patient  The order patient this result belongs to
      *                                   (multi-patient orders). Null = Patient 1 meta, as before.
      */
-    private static function build_html_report( array $data, WC_Order $order, ?array $order_patient = null ): string {
+    private static function build_html_report( array $data, WC_Order $order ): string {
         $patient  = $data['patient'] ?? array();
         $reports  = $data['reports'] ?? array();
         $ref      = $order->get_meta('_repose_reference_number');
-        if ( $order_patient ) {
-            $forename = $order_patient['forename'] ?: ($patient['patientName']['givenName']  ?? '');
-            $surname  = $order_patient['surname']  ?: ($patient['patientName']['familyName'] ?? '');
-            $dob      = $order_patient['dob']      ?: self::format_dob( $patient['dateOfBirth'] ?? '' );
-            $sex      = $order_patient['sex']      ?: ($patient['sex'] ?? '');
-        } else {
-            $forename = $order->get_meta('_repose_patient_forename') ?: ($patient['patientName']['givenName']  ?? '');
-            $surname  = $order->get_meta('_repose_patient_surname')  ?: ($patient['patientName']['familyName'] ?? '');
-            $dob      = $order->get_meta('_repose_date_of_birth')    ?: self::format_dob( $patient['dateOfBirth'] ?? '' );
-            $sex      = $order->get_meta('_repose_sex_at_birth')     ?: ($patient['sex'] ?? '');
-        }
+        // Demographics come only from the lab result: the buyer may order for someone else.
+        $forename = (string) ( $patient['patientName']['givenName']  ?? '' );
+        $surname  = (string) ( $patient['patientName']['familyName'] ?? '' );
+        $dob      = self::format_dob( (string) ( $patient['dateOfBirth'] ?? '' ) );
+        $sex      = self::format_sex( (string) ( $patient['sex'] ?? '' ) );
         $email    = $order->get_billing_email();
         $company  = get_option('repose_company_name',    'Repose Healthcare Ltd');
         $address  = get_option('repose_company_address', '');
@@ -1654,5 +1648,22 @@ table{width:100%;border-collapse:collapse}th{text-align:left}
             return $d . '/' . $m . '/' . $y;
         }
         return $raw;
+    }
+
+    /**
+     * HL7 administrative sex code -> UK wording (NHS Data Dictionary style).
+     * Unrecognised values are shown as sent.
+     */
+    private static function format_sex( string $raw ): string {
+        $map = array(
+            'M' => 'Male',
+            'F' => 'Female',
+            'U' => 'Not Known',
+            'O' => 'Other',
+            'A' => 'Indeterminate',
+            'N' => 'Not Specified',
+        );
+        $code = strtoupper( trim( $raw ) );
+        return $map[ $code ] ?? $raw;
     }
 }
